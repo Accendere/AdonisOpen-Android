@@ -165,6 +165,29 @@
                 android:resource="@xml/provider_paths" />
         </provider>
 
+        <receiver
+            android:name="org.linhome.widgets.ReceiveCallsWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="org.linhome.action.TOGGLE_RECEIVE_CALLS" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_receive_calls_info" />
+        </receiver>
+
+        <service
+            android:name="org.linhome.quicksettings.ReceiveCallsTileService"
+            android:icon="@drawable/ic_qs_adonis_tile"
+            android:label="@string/widget_receive_calls_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
     </application>
 
 
