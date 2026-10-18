@@ -11,7 +11,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         tools:context=".ui.devices.DevicesFragment"
-        backgoundcolor='@{"color_c"}'
+        backgoundcolor='@{"color_f"}'
         >
         <TextView
             android:id="@+id/title"
@@ -31,19 +31,20 @@
             android:id="@+id/swiperefresh"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginStart="57dp"
-            android:layout_marginEnd="57dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            android:layout_marginTop="7dp"
-            android:paddingBottom="7dp">
+            android:layout_marginTop="12dp"
+            android:paddingBottom="8dp">
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/device_list"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-
+            android:clipToPadding="false"
+            android:paddingBottom="80dp"
             />
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
@@ -52,13 +53,14 @@
             icon='@{"icons/more"}'
             backgroundeffect='@{"primary_color"}'
             tint='@{"color_c"}'
-            app:fabCustomSize="50dp"
-            android:layout_width="50dp"
-            android:layout_height="50dp"
+            app:fabCustomSize="56dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            app:elevation="6dp"
             app:layout_constraintBottom_toBottomOf="parent"
-            android:layout_marginBottom="17dp"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent" />
+            android:layout_marginBottom="20dp"
+            android:layout_marginEnd="20dp"
+            app:layout_constraintEnd_toEndOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 

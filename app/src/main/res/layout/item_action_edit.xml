@@ -10,47 +10,56 @@
 
 <LinearLayout
     android:id="@+id/list_item"
-    android:orientation="horizontal"
+    android:orientation="vertical"
     android:layout_width="match_parent"
-    android:layout_height="40dp"
-    android:gravity="top">
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:layout_marginBottom="16dp">
 
-    <org.linhome.ui.widgets.LSpinner
-        android:id="@+id/type"
-        android:layout_width="0dp"
-        android:layout_weight="1"
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        items="@{actionmodel.owningViewModel.availableActionTypes}"
-        missingText='@{"action_type_missing"}'
-        showMissingText = "@{!TextUtils.isEmpty(actionmodel.code.first) &amp;&amp; actionmodel.type== 0}"
-        titletext='@{actionmodel.owningViewModel.getText("action") + " "+actionmodel.displayIndex}'
-        listener="@{actionmodel.actionTypeListener}"
-        initialIndex="@{actionmodel.type}"
-        />
+        android:gravity="bottom">
+
+        <org.linhome.ui.widgets.LSpinner
+            android:id="@+id/type"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            items="@{actionmodel.owningViewModel.availableActionTypes}"
+            missingText='@{"action_type_missing"}'
+            showMissingText = "@{!TextUtils.isEmpty(actionmodel.code.first) &amp;&amp; actionmodel.type== 0}"
+            titletext='@{actionmodel.owningViewModel.getText("action") + " "+actionmodel.displayIndex}'
+            listener="@{actionmodel.actionTypeListener}"
+            initialIndex="@{actionmodel.type}"
+            />
+
+        <ImageView
+            android:id="@+id/trash"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="12dp"
+            android:layout_marginBottom="10dp"
+            android:padding="2dp"
+            foreground_selection_effect='@{"primary_color"}'
+            src='@{"icons/delete"}'
+            android:onClick='@{()->actionmodel.removeAction()}'
+            android:contentDescription="@null"
+            />
+    </LinearLayout>
 
     <org.linhome.ui.widgets.LTextInput
         android:id="@+id/code"
-        android:layout_width="54dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="7dp"
+        android:layout_marginTop="8dp"
         title='@{"action_code"}'
         android:inputType="@{InputType.TYPE_CLASS_PHONE}"
         liveString="@{actionmodel.code.first}"
         liveValidity="@{actionmodel.code.second}"
         validator="@{validators.actionCode}"
       />
-
-    <ImageView
-        android:layout_marginTop="32dp"
-        android:layout_height="20dp"
-        android:id="@+id/trash"
-        android:layout_width="20dp"
-        android:layout_marginStart="10dp"
-        foreground_selection_effect='@{"primary_color"}'
-        src='@{"icons/delete"}'
-        android:onClick='@{()->actionmodel.removeAction()}'
-        >
-    </ImageView>
 
 </LinearLayout>
 </layout>

@@ -6,82 +6,97 @@
 
         <androidx.cardview.widget.CardView xmlns:app="http://schemas.android.com/apk/res-auto"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="120dp"
+            android:layout_height="104dp"
             android:id="@+id/device_image_card"
             roundRectWithColor='@{"color_i"}'
             andRadius='@{"device_in_device_list_corner_radius"}'
+            andStrokeWidth='@{1}'
+            andStrokeColor='@{"color_t"}'
+            selected_stroke_color='@{"color_a"}'
             android:visibility="visible"
-            android:layout_marginBottom="7dp"
-            android:elevation="0dp"
+            android:layout_marginBottom="14dp"
+            android:elevation="2dp"
+            app:cardElevation="2dp"
             >
             <org.linhome.ui.widgets.LDeviceImageView
                 android:id="@+id/device_image"
-                android:scaleType="centerInside"
-                android:adjustViewBounds="true"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                device='@{device}'
-                android:alpha="0.5">
-            </org.linhome.ui.widgets.LDeviceImageView>
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone" />
 
             <RelativeLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent">
+                android:layout_height="match_parent"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:paddingTop="16dp"
+                android:paddingBottom="16dp">
 
-                <TextView
-                    android:id="@+id/name"
-                    android:layout_width="wrap_content"
+                <RelativeLayout
+                    android:id="@+id/icon_badge"
+                    android:layout_width="54dp"
+                    android:layout_height="54dp"
+                    android:layout_centerVertical="true"
+                    android:layout_alignParentStart="true"
+                    roundRectWithColor='@{"color_d"}'
+                    andRadius='@{"user_input_corner_radius"}'
+                    android:visibility='@{device.typeIcon() != null ? View.VISIBLE : View.GONE}'>
+
+                    <ImageView
+                        android:id="@+id/type_icon"
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:layout_centerInParent="true"
+                        android:src="@drawable/ic_linhome_icon"
+                        tint='@{"color_a"}'
+                        icon='@{device.typeIcon()}'
+                        />
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_above="@+id/address"
-                    android:layout_marginTop="7dp"
-                    style='@{"device_list_device_name"}'
-                    android:layout_marginStart="20dp"
-                    android:text="@{device.name}" />
+                    android:orientation="vertical"
+                    android:layout_centerVertical="true"
+                    android:layout_toEndOf="@+id/icon_badge"
+                    android:layout_toStartOf="@+id/call"
+                    android:layout_marginStart="16dp"
+                    android:layout_marginEnd="12dp">
 
-                <ImageView
-                    android:id="@+id/type_icon"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@drawable/ic_linhome_icon"
-                    android:layout_above="@+id/name"
-                    android:visibility='@{device.typeIcon() != null ? View.VISIBLE : View.GONE}'
-                    android:layout_marginStart="20dp"
-                    icon='@{device.typeIcon()}'
-                    />
+                    <TextView
+                        android:id="@+id/name"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:singleLine="true"
+                        style='@{"device_list_device_name"}'
+                        android:text="@{device.name}" />
 
-
-                <TextView
-                    android:id="@+id/address"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:layout_alignParentBottom="true"
-                    android:layout_marginBottom="17dp"
-                    android:layout_marginTop="1dp"
-                    android:layout_marginStart="20dp"
-                    style='@{"device_list_device_address"}'
-                    android:text="@{device.address}"
-                     />
+                    <TextView
+                        android:id="@+id/address"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:singleLine="true"
+                        android:layout_marginTop="4dp"
+                        style='@{"device_list_device_address"}'
+                        android:text="@{device.address}"
+                         />
+                </LinearLayout>
 
                 <com.google.android.material.floatingactionbutton.FloatingActionButton
                     android:id="@+id/call"
                     backgroundeffect='@{"primary_color"}'
                     tint='@{"color_c"}'
                     icon='@{device.supportsVideo() ? "icons/eye" : "icons/phone"}'
-                    app:fabCustomSize="50dp"
-                    android:layout_width="50dp"
-                    android:layout_height="50dp"
-                    android:layout_marginBottom="13dp"
-                    android:layout_gravity="end"
-                    android:layout_marginEnd="13dp"
+                    app:fabCustomSize="52dp"
+                    android:layout_width="52dp"
+                    android:layout_height="52dp"
+                    app:elevation="2dp"
                     android:layout_alignParentEnd="true"
-                    android:layout_alignParentBottom="true"
+                    android:layout_centerVertical="true"
                     android:onClick="@{() -> device.call()}"
                     />
             </RelativeLayout>
-
-
 
         </androidx.cardview.widget.CardView>
 

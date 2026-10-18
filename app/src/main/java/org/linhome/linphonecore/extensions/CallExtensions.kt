@@ -40,27 +40,33 @@ import org.linphone.core.Core
 fun Call.extendedAcceptEarlyMedia() {
     if (state == Call.State.IncomingReceived) {
         val earlyMediaCallParams: CallParams? = coreContext.core.createCallParams(this)
-        earlyMediaCallParams?.recordFile = callLog.historyEvent().mediaFileName
+        if (corePreferences.saveCallVideos) {
+            earlyMediaCallParams?.recordFile = callLog.historyEvent().mediaFileName
+        }
         isCameraEnabled = false
         acceptEarlyMediaWithParams(earlyMediaCallParams)
         GlobalScope.launch(context = Dispatchers.Main) {
             muteAudioPLayBack()
-            startRecording()
+            if (corePreferences.saveCallVideos) {
+                startRecording()
+            }
         }
     }
 }
 
-fun Call.extendedAccept() {
-
-    if (coreContext.gsmCallActive()) {
-        DialogUtil.toast("unable_to_accept_call_gsm_call_in_progress")
-        return
-    }
-
+fun Call.extendedAcceptSilent() {
+    coreContext.markCallSilentlyAccepted(this)
+    coreContext.core.stopRinging()
+    coreContext.core.stopDtmf()
+    coreContext.core.isMicEnabled = false
     val inCallParams: CallParams? = coreContext.core.createCallParams(this)
-    inCallParams?.recordFile = callLog.historyEvent().mediaFileName
+    if (corePreferences.saveCallVideos) {
+        inCallParams?.recordFile = callLog.historyEvent().mediaFileName
+    }
     isCameraEnabled = false
-    unMuteAudioPLayBack()
+    setSpeakerMuted(true)
+    setMicrophoneMuted(true)
+    muteAudioPLayBack()
     val device = DeviceStore.findDeviceByAddress(remoteAddress)
     if (device != null) {
         coreContext.core.useRfc2833ForDtmf = device.actionsMethodType == "method_dtmf_rfc_4733"
@@ -71,7 +77,76 @@ fun Call.extendedAccept() {
     }
 
     acceptWithParams(inCallParams)
-    if (!isRecording)
+    coreContext.core.stopRinging()
+    coreContext.core.stopDtmf()
+    coreContext.core.isMicEnabled = false
+    setSpeakerMuted(true)
+    setMicrophoneMuted(true)
+    muteAudioPLayBack()
+    if (corePreferences.saveCallVideos && !isRecording)
+        startRecording()
+}
+
+fun Call.extendedAccept() {
+    val wasSilentlyAccepted = coreContext.isCallSilentlyAccepted(this)
+    coreContext.clearSilentlyAccepted(this)
+    val gsmActive = coreContext.gsmCallActive()
+    isCameraEnabled = false
+
+    if (wasSilentlyAccepted && (state == Call.State.Connected || state == Call.State.StreamsRunning || state == Call.State.Updating || state == Call.State.UpdatedByRemote)) {
+        if (gsmActive) {
+            coreContext.core.isMicEnabled = false
+            setSpeakerMuted(true)
+            setMicrophoneMuted(true)
+            muteAudioPLayBack()
+            DialogUtil.toast("call_accepted_video_only_gsm_active")
+        } else {
+            coreContext.core.isMicEnabled = true
+            setSpeakerMuted(false)
+            setMicrophoneMuted(false)
+            unMuteAudioPLayBack()
+        }
+        coreContext.onCallStarted(this)
+        return
+    }
+
+    val inCallParams: CallParams? = coreContext.core.createCallParams(this)
+    if (corePreferences.saveCallVideos) {
+        inCallParams?.recordFile = callLog.historyEvent().mediaFileName
+    }
+    if (gsmActive) {
+        inCallParams?.isAudioEnabled = false
+        coreContext.core.isMicEnabled = false
+        setSpeakerMuted(true)
+        setMicrophoneMuted(true)
+        muteAudioPLayBack()
+        DialogUtil.toast("call_accepted_video_only_gsm_active")
+    } else {
+        coreContext.core.isMicEnabled = true
+        setSpeakerMuted(false)
+        setMicrophoneMuted(false)
+        unMuteAudioPLayBack()
+    }
+    val device = DeviceStore.findDeviceByAddress(remoteAddress)
+    if (device != null) {
+        coreContext.core.useRfc2833ForDtmf = device.actionsMethodType == "method_dtmf_rfc_4733"
+        coreContext.core.useInfoForDtmf = device.actionsMethodType == "method_dtmf_sip_info"
+    } else {
+        coreContext.core.useRfc2833ForDtmf = corePreferences.defaultActionsMethodType == "method_dtmf_rfc_4733"
+        coreContext.core.useInfoForDtmf = corePreferences.defaultActionsMethodType == "method_dtmf_sip_info"
+    }
+
+    acceptWithParams(inCallParams)
+    if (gsmActive) {
+        coreContext.core.isMicEnabled = false
+        setSpeakerMuted(true)
+        setMicrophoneMuted(true)
+    } else {
+        coreContext.core.isMicEnabled = true
+        setSpeakerMuted(false)
+        setMicrophoneMuted(false)
+    }
+    if (corePreferences.saveCallVideos && !isRecording)
         startRecording()
 }
 

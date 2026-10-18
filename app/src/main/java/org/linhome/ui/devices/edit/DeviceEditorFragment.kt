@@ -67,6 +67,12 @@ class DeviceEditorFragment : GenericFragment() {
         }
 
         model.device = args.device
+        if (model.device == null && model.address.first.value.isNullOrEmpty()) {
+            arguments?.getString("address")?.let { prefillAddress ->
+                model.address.first.value = prefillAddress
+                model.address.second.value = true
+            }
+        }
 
         if (model.actionsViewModels.isEmpty()) {
             if (model.device == null) {

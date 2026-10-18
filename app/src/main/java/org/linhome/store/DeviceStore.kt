@@ -237,11 +237,13 @@ object DeviceStore {
                     Log.e("[DeviceStore] unable to save device to local friend list. status : $addResult")
             }
         }
+        mutableDevices?.postValue(devices)
     }
 
     fun persistDevice(device: Device) {
         devices.add(device)
         saveLocalDevices()
+        mutableDevices?.postValue(devices)
     }
 
     fun removeDevice(device: Device) {
@@ -251,6 +253,7 @@ object DeviceStore {
         }
         devices.remove(device)
         saveLocalDevices()
+        mutableDevices?.postValue(devices)
     }
 
     fun findDeviceByAddress(address: Address): Device? {
@@ -258,6 +261,11 @@ object DeviceStore {
             val deviceAddress = LinhomeApplication.coreContext.core.createAddress(it.address)
             if (deviceAddress?.username == address.username && deviceAddress?.domain == address.domain)
                 return it
+            if (!it.alternativeAddress.isNullOrBlank()) {
+                val altAddress = LinhomeApplication.coreContext.core.createAddress(it.alternativeAddress)
+                if (altAddress?.username == address.username && altAddress?.domain == address.domain)
+                    return it
+            }
         }
         return null
     }

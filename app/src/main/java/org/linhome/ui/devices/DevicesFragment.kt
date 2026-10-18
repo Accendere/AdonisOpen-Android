@@ -125,6 +125,9 @@ class DevicesFragment : GenericFragment() {
 
     override fun onResume() {
         super.onResume()
+        devicesViewModel.devices.value = DeviceStore.devices
+        (binding.deviceList.adapter as? RecyclerView.Adapter)?.notifyDataSetChanged()
+        binding.invalidateAll()
         if (LinhomeApplication.instance.tablet()) {
             if (devicesViewModel.devices.value!!.size == 0) {
                 binding.newDevice.visibility = View.GONE

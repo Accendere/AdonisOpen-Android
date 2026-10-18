@@ -39,13 +39,15 @@ import org.linhome.utils.databindings.ViewModelWithTools
 class DeviceEditorViewModel : ViewModelWithTools() {
 
     val defaultDeviceType = 2 	// Video Intercom
-    val defaulMethodType = 1 	// DTMF SIP INFO
+    val defaulMethodType = 2 	// DTMF RFC 4733
 
 
     var name: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
         Pair(MutableLiveData<String>(), MutableLiveData<Boolean>(false))
     var address: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
         Pair(MutableLiveData<String>(), MutableLiveData<Boolean>(false))
+    var alternativeAddress: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
+        Pair(MutableLiveData<String>(""), MutableLiveData<Boolean>(true))
 
     var availableDeviceTypes: ArrayList<SpinnerItem> = ArrayList()
     var deviceType: MutableLiveData<Int> = MutableLiveData<Int>(defaultDeviceType)
@@ -64,6 +66,7 @@ class DeviceEditorViewModel : ViewModelWithTools() {
             value?.also {
                 name.first.value = it.name
                 address.first.value = it.address
+                alternativeAddress.first.value = it.alternativeAddress ?: ""
                 deviceType.value = indexByBackingKey(it.type, availableDeviceTypes)
                 actionsMethod.value = indexByBackingKey(it.actionsMethodType, availableMethodTypes)
             }
@@ -100,7 +103,7 @@ class DeviceEditorViewModel : ViewModelWithTools() {
     }
 
     fun valid(): Boolean {
-        return name.second.value!! && address.second.value!!
+        return (name.second.value == true) && (address.second.value == true) && (alternativeAddress.second.value ?: true)
     }
 
     fun saveDevice(): Boolean {
@@ -111,6 +114,12 @@ class DeviceEditorViewModel : ViewModelWithTools() {
                 return false
         }
 
+        val altAddressValue = alternativeAddress.first.value?.trim()?.let {
+            if (it.isBlank()) null
+            else if (it.startsWith("sip:") || it.startsWith("sips:")) it
+            else "sip:$it"
+        }
+
         if (device == null) {
             device = Device(
                 if (deviceType.value == 0) null else availableDeviceTypes.get(deviceType.value!!).backingKey,
@@ -118,7 +127,8 @@ class DeviceEditorViewModel : ViewModelWithTools() {
                 if (address.first.value!!.startsWith("sip:") || address.first.value!!.startsWith("sips:")) address.first.value!! else "sip:${address.first.value}",
                 if (actionsMethod.value == 0) null else availableMethodTypes.get(actionsMethod.value!!).backingKey,
                 ArrayList(),
-                false
+                false,
+                altAddressValue
             )
             actionsViewModels.forEach {
                 if (it.notEmpty())
@@ -136,6 +146,7 @@ class DeviceEditorViewModel : ViewModelWithTools() {
                     if (deviceType.value == 0) null else availableDeviceTypes.get(deviceType.value!!).backingKey
                 it.name = name.first.value!!
                 it.address =  if (address.first.value!!.startsWith("sip:") || address.first.value!!.startsWith("sips:")) address.first.value!! else "sip:${address.first.value}"
+                it.alternativeAddress = altAddressValue
                 it.actionsMethodType =
                     if (actionsMethod.value == 0) null else availableMethodTypes.get(actionsMethod.value!!).backingKey
                 it.actions = ArrayList()

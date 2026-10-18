@@ -50,7 +50,8 @@ data class Device(
     var address: String,
     var actionsMethodType: String?,
     var actions: ArrayList<Action>?,
-    var isRemotelyProvisionned: Boolean
+    var isRemotelyProvisionned: Boolean,
+    var alternativeAddress: String? = null
 ) :
     Parcelable {
 
@@ -58,12 +59,23 @@ data class Device(
         get() =
             LinhomeApplication.coreContext.core.createFriend().let { friend ->
                 friend.createVcard(name)
-                friend.vcard?.addExtendedProperty(vcard_device_type_header, type!!)
+                friend.name = name
+                if (friend.vcard?.fullName.isNullOrBlank()) {
+                    friend.vcard?.fullName = name
+                }
+                val deviceType = type ?: "device_video_intercom"
+                friend.vcard?.addExtendedProperty(vcard_device_type_header, deviceType)
                 friend.vcard?.addSipAddress(address)
-                friend.vcard?.addExtendedProperty(vcard_action_method_type_header,
-                    deviceActionMethodsTovCardActionMethods().get(actionsMethodType!!)!!)
+                if (!alternativeAddress.isNullOrBlank()) {
+                    friend.vcard?.addSipAddress(alternativeAddress!!)
+                    friend.vcard?.addExtendedProperty(vcard_alternative_address_header, alternativeAddress!!)
+                }
+                val methodKey = actionsMethodType?.let { deviceActionMethodsTovCardActionMethods()[it] } ?: "sipinfo"
+                friend.vcard?.addExtendedProperty(vcard_action_method_type_header, methodKey)
                 actions?.forEach { it ->
-                    friend.vcard?.addExtendedProperty(vcard_actions_list_header,it.type!! + "~" + it.code!!)
+                    if (!it.type.isNullOrBlank() && !it.code.isNullOrBlank()) {
+                        friend.vcard?.addExtendedProperty(vcard_actions_list_header, it.type!! + "~" + it.code!!)
+                    }
                 }
                 Log.i("[Device] created vCard for device: $name ${friend.vcard?.asVcard4String()}")
                 friend
@@ -77,26 +89,30 @@ data class Device(
         address: String,
         actionsMethodType: String?,
         actions: ArrayList<Action>?,
-        isRemotelyProvisionned: Boolean
+        isRemotelyProvisionned: Boolean,
+        alternativeAddress: String? = null
     ) : this(
-        xDigitsUUID(), type, name, address, actionsMethodType, actions, isRemotelyProvisionned
+        xDigitsUUID(), type, name, address, actionsMethodType, actions, isRemotelyProvisionned, alternativeAddress
     )
 
-    constructor (card:Vcard, isRemotelyProvisionned:Boolean) : this(card.sipAddresses.component1()?.asStringUriOnly()!!.md5(),
-        card.getExtendedPropertiesValuesByName(vcard_device_type_header).component1(),
-        card.fullName!!,
-        card.sipAddresses.component1()?.asStringUriOnly()!!,
-        vCardActionMethodsToDeviceMethods.get(card.getExtendedPropertiesValuesByName(vcard_action_method_type_header).component1()),
+    constructor (card: Vcard, isRemotelyProvisionned: Boolean) : this(
+        card.sipAddresses.firstOrNull()?.asStringUriOnly()?.md5() ?: xDigitsUUID(),
+        card.getExtendedPropertiesValuesByName(vcard_device_type_header)?.firstOrNull(),
+        card.fullName ?: "Intercom",
+        card.sipAddresses.firstOrNull()?.asStringUriOnly() ?: "",
+        vCardActionMethodsToDeviceMethods.get(card.getExtendedPropertiesValuesByName(vcard_action_method_type_header)?.firstOrNull()),
         ArrayList(),
-        isRemotelyProvisionned)
-    {
-        card.getExtendedPropertiesValuesByName(vcard_actions_list_header).forEach { action ->
-            var actionCleaned = action.replace("\\;","~").replace(";","~")
-            var components = actionCleaned.split("~")
-            if (components.size != 2)  {
+        isRemotelyProvisionned,
+        card.getExtendedPropertiesValuesByName(vcard_alternative_address_header)?.firstOrNull()
+            ?: (if (card.sipAddresses.size > 1) card.sipAddresses[1].asStringUriOnly() else null)
+    ) {
+        card.getExtendedPropertiesValuesByName(vcard_actions_list_header)?.forEach { action ->
+            val actionCleaned = action.replace("\\;", "~").replace(";", "~")
+            val components = actionCleaned.split("~")
+            if (components.size != 2) {
                 Log.e("Unable to create action from VCard $action")
             } else {
-                actions?.add(Action(components.component1(), components.component2()))
+                actions?.add(Action(components[0], components[1]))
             }
         }
     }
@@ -132,7 +148,9 @@ data class Device(
             params?.isAudioEnabled = DeviceTypes.supportsAudio(it)
         }
         val historyEvent = HistoryEvent()
-        params?.recordFile = historyEvent.mediaFileName
+        if (LinhomeApplication.corePreferences.saveCallVideos) {
+            params?.recordFile = historyEvent.mediaFileName
+        }
         LinhomeApplication.coreContext.core.createAddress(address)?.let {
             val call = params?.let { parameters ->
                 LinhomeApplication.coreContext.core.useRfc2833ForDtmf = actionsMethodType == "method_dtmf_rfc_4733"
@@ -167,6 +185,7 @@ data class Device(
         const val vcard_device_type_header = "X-LINPHONE-ACCOUNT-TYPE"
         const val vcard_actions_list_header = "X-LINPHONE-ACCOUNT-ACTION"
         const val vcard_action_method_type_header = "X-LINPHONE-ACCOUNT-DTMF-PROTOCOL"
+        const val vcard_alternative_address_header = "X-LINPHONE-ALT-ADDRESS"
         val vCardActionMethodsToDeviceMethods = mapOf( "sipinfo" to "method_dtmf_sip_info","rfc2833" to "method_dtmf_rfc_4733","sipmessage" to "method_sip_message") // Server side method names to local app names
         fun deviceActionMethodsTovCardActionMethods () : HashMap<String,String> {
             var result = hashMapOf<String,String>()

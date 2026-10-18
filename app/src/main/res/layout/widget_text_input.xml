@@ -23,11 +23,11 @@
     <org.linhome.ui.widgets.LEditText
         android:id="@+id/text"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="5dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="6dp"
         android:lines="1"
-        android:paddingStart="14dp"
-        android:paddingEnd="28dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
         android:textCursorDrawable="@null"
         android:focusableInTouchMode="true"
         android:inputType='@{owner.inputType}'
