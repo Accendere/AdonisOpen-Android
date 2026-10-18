@@ -13,7 +13,7 @@ plugins {
 
 tasks.register("zipTheme", Zip) {
     println("Zipping theme")
-    from("../linhome-shared-themes/")
+    from("../AdonisOpen-Shared-Themes/")
     include("action_types.xml")
     include("method_types.xml")
     include("device_types.xml")

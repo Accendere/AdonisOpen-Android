@@ -1,0 +1,24 @@
+Adonis Open Android
+Copyright (c) 2026 Adonis Open Contributors
+
+This software is a fork of Linhome Android:
+Copyright (c) 2010-2025 Belledonne Communications SARL.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This project uses and links to:
+- Liblinphone Android SDK
+  Copyright (c) Belledonne Communications SARL
+  Licensed under the GNU General Public License v3 (or proprietary)
+  Website: https://www.linphone.org
+
+- AdonisOpen-Shared-Themes (submodule, fork of linhome-shared-themes)
+  Copyright (c) Belledonne Communications SARL / Adonis Open Contributors
+  Licensed under GNU General Public License v3
+
+Trademarks:
+"Linhome" and "Linphone" are registered trademarks of Belledonne Communications SARL.
+"Adonis Open" is an independent open source project not affiliated with or endorsed by Belledonne Communications.

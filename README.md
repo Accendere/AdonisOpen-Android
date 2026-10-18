@@ -1,123 +1,83 @@
-[![pipeline status](https://gitlab.linphone.org/BC/private/linhome-android/badges/master/pipeline.svg)](https://gitlab.linphone.org/BC/private/linhome-android/commits/master)
+# Adonis Open Android
 
+Adonis Open is an open-source Android smart intercom and video door entry client designed for seamless integration with modern home automation systems (including Home Assistant) and standard SIP door stations.
 
-Linhome is an open source software designed to communicate via voice and video with door entry devices.
-The Linhome application has been developed to meet the emerging needs of intercom and video monitoring system developers to leverage a robust, secure and interoperable open source VoIP solution to build their own mobile application.
+> **Note on Fork & Upstream**:  
+> Adonis Open is a fork of [Linhome](https://www.linhome.org/) developed by [Belledonne Communications SARL](https://www.belledonne-communications.com/).  
+> We build upon and retain the robust, interoperable Liblinphone / Linhome VoIP SDK while adding:
+> - Home Assistant one-click auto-configuration (`adonis://` deep links)
+> - Dual SIP address support (primary & alternative internal/external addresses)
+> - Visual confirmation and vibration feedback for silent door release actions
+> - Configurable history retention auto-clean up (1, 2, or 3 days)
+> - Android Quick Settings Tile and Home Screen Widget to easily toggle receiving calls
+> - Default RFC 4733 DTMF method for door actions
+> - Redesigned Adonis Open branding, UI themes, and icons
 
-General description is available from [Linhome web site](https://www.linhome.org)
+---
 
-### License
+## License & Attribution
 
-Copyright © Belledonne Communications
+Copyright © 2010–2025 Belledonne Communications SARL  
+Modifications Copyright © 2026 Adonis Open Contributors
 
-Linhome is dual licensed, and is available either :
+Linhome is dual licensed under GNU/GPLv3 and proprietary terms. Adonis Open is licensed under the **GNU General Public License v3 (GPLv3)**. Please see the [LICENSE.txt](LICENSE.txt) and [NOTICE](NOTICE) files for full details.
 
- - under a [GNU/GPLv3 license](https://www.gnu.org/licenses/gpl-3.0.en.html), for free (open source). Please make sure that you understand and agree with the terms of this license before using it (see LICENSE file for details).
+- **GNU General Public License v3**: https://www.gnu.org/licenses/gpl-3.0.html
+- **Upstream Linhome Project**: https://www.linhome.org
+- **Liblinphone Technical Documentation**: https://www.linphone.org/technical-corner/liblinphone
+- **Adonis Open Source Code**:
+  - Android App: https://github.com/Accendere/AdonisOpen-Android
+  - Shared Themes: https://github.com/Accendere/AdonisOpen-Shared-Themes
 
- - under a proprietary license, for a fee, to be used in closed source applications. Contact
+*Linhome and Linphone are registered trademarks of Belledonne Communications SARL. Adonis Open is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Belledonne Communications.*
 
-[Belledonne Communications](https://www.linhome.org/contact/) for any question about costs and services.
+---
 
-### Documentation
+## Building the App
 
-- Supported features and RFCs from the underlying Liblinphone library : https://www.linphone.org/technical-corner/liblinphone
+The app depends on a single git submodule that holds shared theme resources (images, colors, vector icons, texts, and translations).
 
-
-# Building the app
-
-The app depends on a single git submodule that holds the shared information with iOS App that is the Theme (images, colors, fonts, etc) and the texts and translations of the app. 
-So after cloning the repository make sure you run : 
-```
+After cloning the repository, initialize and update the submodule:
+```bash
 git submodule update --init --recursive
 ```
-The application will automatically collect the appropriate information from the shared submodule as part of the gradle build script.
 
-If you have Android Studio, simply open the project, wait for the gradle synchronization and then build/install the app.
-It will download the linphone library from our Maven repository as an AAR file so you don't have to build anything yourself.
+The application automatically collects the appropriate information from the `AdonisOpen-Shared-Themes` submodule as part of the Gradle build script (`zipTheme` task).
 
-If you don't have Android Studio, you can build and install the app using gradle:
+### Command Line Build
+Using Gradle:
+```bash
+./gradlew zipTheme assembleDebug
 ```
-./gradlew assembleDebug
+The compiled APK will be generated at:
 ```
-will compile the APK file (assembleRelease to instead if you want to build a release package), and then
+./app/build/outputs/apk/debug/adonis-open-debug-1.5.0.apk
 ```
+To install directly to a connected Android device:
+```bash
 ./gradlew installDebug
 ```
-to install the generated APK in the previous step (use installRelease instead if you built a release package).
 
-APK files are stored within ```./app/build/outputs/apk/debug/``` and ```./app/build/outputs/apk/release/``` directories.
+### Android Studio
+Open the project in Android Studio, allow Gradle synchronization to complete, and run or build the `debug` or `release` variant.
 
-## Building a local SDK
+---
 
-1. Clone the linphone-sdk repository from out gitlab:
-```
-git clone https://gitlab.linphone.org/BC/public/linphone-sdk.git --recursive
-```
+## Features & Configuration
 
-2. Follow the instructions in the linphone-sdk/README file to build the SDK.
+### Home Assistant Auto-Configuration
+Adonis Open supports instant auto-configuration from Home Assistant or external setup URLs using the `adonis://` deep link scheme. A base64-encoded JSON configuration string containing SIP credentials and door station device settings can be provisioned in one step.
 
-3. Create or edit the gradle.properties file in $GRADLE_USER_HOME (usually ~/.gradle) file and add the absolute path to your linphone-sdk build directory, for example:
-```
-LinphoneSdkBuildDir=/home/<username>/linphone-sdk/build/
-```
+### Quick Settings & Widgets
+- **Quick Settings Tile**: Toggle "Receive Calls" on or off directly from the Android quick settings notification shade.
+- **Home Screen Widget**: 1x1 toggle widget displaying live call reception state (green when active, red when paused).
 
-4. Rebuild the app in Android Studio.
+### Door Release & Action Handling
+- Supports RFC 4733 (default), SIP INFO, and in-band DTMF transmission for unlocking doors, gates, and turning on lights.
+- In-call and pre-answer door open actions support silent operation with visual feedback banners and haptic vibration.
 
-## Native debugging
+---
 
-1. Install LLDB from SDK Tools in Android-studio.
+## Contributions
 
-2. In Android-studio go to Run->Edit Configurations->Debugger.
-
-3. Select 'Dual' or 'Native' and add the path to linphone-sdk debug libraries (build/libs-debug/ for example).
-
-4. Open native file and put your breakpoint on it.
-
-5. Make sure you are using the debug AAR in the app/build.gradle script and not the release one (to have faster builds by default the release AAR is used even for debug APK flavor).
-
-6. Debug app.
-
-## Troubleshouting
-
-If you encounter the `couldn't find "libc++_shared.so"` crash when the app starts, simply clean the project in Android Studio (under Build menu) and build again.
-
-When submitting an issue, please attach the matching library logs. To enable them, go to Settings -> Enable debug logs.
-
-Then restart the app, reproduce the issue and upload the logs using the "Send Log file" button on the About page in Settings Page.
-
-## Create an APK with a different package name
-
-Simply edit the app/build.gradle file and change the value returned by method ```getPackageName()```
-The next build will automatically use this value everywhere thanks to ```manifestPlaceholders``` feature of gradle and Android.
-
-You may have already noticed that the app installed by Android Studio has ```org.linhome.debug``` package name.
-If you build the app as release, the package name will be ```org.linhome```.
-
-## Firebase push notifications
-
-Now that Google Cloud Messaging has been deprecated and will be completely removed on April 11th 2019, the only official way of using push notifications is through Firebase.
-
-However to make Firebase push notifications work, the project needs to have a file named app/google-services.json that contains some confidential informations, so you won't find it (it has been added to the .gitignore file).
-This means that if you compile this project, you won't have push notification feature working in the app!
-
-To enable them, just add your own ```google-services.json``` in the app folder.
-
-
-# CONTRIBUTIONS
-
-In order to submit a patch for inclusion in linphone's source code:
-
-1. First make sure your patch applies to latest git sources before submitting: patches made to old versions can't and won't be merged.
-2. Fill out and send us an email with the link of pullrequest and the [Contributor Agreement](http://www.belledonne-communications.com/downloads/Belledonne_communications_CA.pdf) for your patch to be included in the git tree.
-
-The goal of this agreement to grant us peaceful exercise of our rights on the linphone source code, while not losing your rights on your contribution.
-
-# Device storage and remote provisionning : 
-
-- Devices are now stored in Linphone Friend’s VCards.
-- Apps have 2 friends list, one local for devices created locally in the app, one remote sent by the server
-- Devices created locally can be edited and removed as before
-- Devices received from the server cannot be edited not removed.
-- Values allowed for Account type are : device_audio_intercom|device_video_intercom|device_security_camera|device_internal_unit
-- Values allowed for actions are : action_open_door| action_open_gate | action_lightup | action_unlock
-
+Contributions are welcome under the terms of the GNU General Public License v3. Please submit pull requests to [Accendere/AdonisOpen-Android](https://github.com/Accendere/AdonisOpen-Android).
