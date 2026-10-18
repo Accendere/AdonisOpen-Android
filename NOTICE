@@ -1,24 +1,69 @@
 Adonis Open Android
 Copyright (c) 2026 Adonis Open Contributors
 
-This software is a fork of Linhome Android:
+This software is a modified fork of Linhome Android:
 Copyright (c) 2010-2025 Belledonne Communications SARL.
+Upstream website: https://www.linhome.org
+Upstream repository: https://gitlab.linphone.org/BC/public/linhome-android
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-This project uses and links to:
-- Liblinphone Android SDK
-  Copyright (c) Belledonne Communications SARL
-  Licensed under the GNU General Public License v3 (or proprietary)
-  Website: https://www.linphone.org
+See LICENSE.txt for the full text of the GNU General Public License v3.
 
-- AdonisOpen-Shared-Themes (submodule, fork of linhome-shared-themes)
-  Copyright (c) Belledonne Communications SARL / Adonis Open Contributors
-  Licensed under GNU General Public License v3
+------------------------------------------------------------------------
+Third-Party Components & Libraries
+------------------------------------------------------------------------
 
-Trademarks:
+1. Liblinphone Android SDK (`org.linphone:linphone-sdk-android`)
+   Copyright (c) 2010-2025 Belledonne Communications SARL
+   Licensed under the GNU General Public License v3
+   Website: https://www.linphone.org
+
+2. AdonisOpen-Shared-Themes (submodule, fork of `linhome-shared-themes`)
+   Copyright (c) 2010-2025 Belledonne Communications SARL
+   Modifications Copyright (c) 2026 Adonis Open Contributors
+   Licensed under the GNU General Public License v3
+
+3. Glide (`com.github.bumptech.glide:glide`)
+   Copyright 2014 Google, Inc. All rights reserved.
+   Licensed under the BSD, part MIT and Apache 2.0 Licenses
+   https://github.com/bumptech/glide
+
+4. PermissionsDispatcher (`com.github.permissions-dispatcher:permissionsdispatcher`)
+   Copyright 2016 Shintaro Katafuchi, Marcel Schnelle, Yoshinori Isogai
+   Licensed under the Apache License, Version 2.0
+   https://github.com/permissions-dispatcher/PermissionsDispatcher
+
+5. AndroidSVG (`com.caverock:androidsvg-aar`)
+   Copyright 2013-2020 Paul LeBeau, Cave Rock Software Ltd.
+   Licensed under the Apache License, Version 2.0
+   https://bigbadaboom.github.io/androidsvg/
+
+6. Android-SpinKit (`com.github.ybq:Android-SpinKit`)
+   Copyright 2016 ybq
+   Licensed under the MIT License
+   https://github.com/ybq/Android-SpinKit
+
+7. Apache Commons Codec (`commons-codec:commons-codec`)
+   Copyright 2002-2025 The Apache Software Foundation
+   Licensed under the Apache License, Version 2.0
+   https://commons.apache.org/proper/commons-codec/
+
+8. AndroidX / Jetpack Libraries & Material Components for Android
+   Copyright (c) The Android Open Source Project
+   Licensed under the Apache License, Version 2.0
+   https://developer.android.com/jetpack/androidx
+
+9. Kotlin Standard Library & Kotlinx Coroutines (`org.jetbrains.kotlinx`)
+   Copyright 2010-2025 JetBrains s.r.o. and Kotlin Programming Language contributors
+   Licensed under the Apache License, Version 2.0
+   https://github.com/JetBrains/kotlin
+
+------------------------------------------------------------------------
+Trademarks
+------------------------------------------------------------------------
 "Linhome" and "Linphone" are registered trademarks of Belledonne Communications SARL.
-"Adonis Open" is an independent open source project not affiliated with or endorsed by Belledonne Communications.
+"Adonis Open" is an independent open-source project and is not affiliated with, endorsed by, or sponsored by Belledonne Communications SARL.

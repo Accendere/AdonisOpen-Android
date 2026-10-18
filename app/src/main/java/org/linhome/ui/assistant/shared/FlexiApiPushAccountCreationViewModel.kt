@@ -1,8 +1,9 @@
 /*
  * Copyright (c) 2010-2023 Belledonne Communications SARL.
+ * Modifications Copyright (c) 2026 Adonis Open Contributors.
  *
- * This file is part of linphone-android
- * (see https://www.linphone.org).
+ * This file is part of Adonis Open (fork of linhome-android / linphone-android,
+ * see https://www.linphone.org).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by

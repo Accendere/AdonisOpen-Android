@@ -8,7 +8,8 @@ Adonis Open is an open-source Android smart intercom and video door entry client
 > - Home Assistant one-click auto-configuration (`adonis://` deep links)
 > - Dual SIP address support (primary & alternative internal/external addresses)
 > - Visual confirmation and vibration feedback for silent door release actions
-> - Configurable history retention auto-clean up (1, 2, or 3 days)
+> - Separate configurable history retention auto-clean up for intercom calls and voice calls
+> - Voice call recognition with clean caller number formatting, earpiece audio routing, and optional local device contacts lookup (name & photo)
 > - Android Quick Settings Tile and Home Screen Widget to easily toggle receiving calls
 > - Default RFC 4733 DTMF method for door actions
 > - Redesigned Adonis Open branding, UI themes, and icons
@@ -20,7 +21,7 @@ Adonis Open is an open-source Android smart intercom and video door entry client
 Copyright © 2010–2025 Belledonne Communications SARL  
 Modifications Copyright © 2026 Adonis Open Contributors
 
-Linhome is dual licensed under GNU/GPLv3 and proprietary terms. Adonis Open is licensed under the **GNU General Public License v3 (GPLv3)**. Please see the [LICENSE.txt](LICENSE.txt) and [NOTICE](NOTICE) files for full details.
+Linhome is dual licensed under GNU/GPLv3 and proprietary terms. Adonis Open is licensed under the **GNU General Public License v3 (GPLv3)**. Please see the [LICENSE.txt](LICENSE.txt), [NOTICE](NOTICE), and [PRIVACY.md](PRIVACY.md) files for full details.
 
 - **GNU General Public License v3**: https://www.gnu.org/licenses/gpl-3.0.html
 - **Upstream Linhome Project**: https://www.linhome.org
