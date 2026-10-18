@@ -84,29 +84,17 @@ class CallInProgressActivity : CallGenericActivity() {
                 coreContext.core.nativeVideoWindowId = binding.chunkCallDeviceIconOrVideo?.videocollapsed
                 callViewModel.toggleVideoFullScreen()
             }
-            binding.videofullscreen.setOnTouchListener { _, event ->
-                if (event.action == MotionEvent.ACTION_UP) {
-                    binding.actions.toogleVisible()
-                    binding.controls?.toogleVisible()
-                    binding.timer.toogleVisible()
-                }
-                true
-            }
             callViewModel.videoFullScreen.observe(this, Observer { full ->
-                if (!full) {
-                    binding.actions.forceVisible()
-                    binding.controls?.forceVisible()
-                    binding.timer.forceVisible()
-                }
+                binding.actions.forceVisible()
+                binding.controls?.forceVisible()
+                binding.timer.forceVisible()
                 coreContext.core.nativeVideoWindowId =
                     if (callViewModel.videoFullScreen.value!!) binding.videofullscreen else binding.chunkCallDeviceIconOrVideo?.videocollapsed
             })
             callViewModel.videoSize.observe(this, Observer { size ->
                 binding.chunkCallVideoOrIcon.updateLayoutParams<ConstraintLayout.LayoutParams> {
                     dimensionRatio = "H,${size.width}:${size.height}"
-                    val deviceHasButtons = callViewModel.device.value?.actions?.size?.let {
-                        it > 0
-                    } ?: false
+                    val deviceHasButtons = callViewModel.actions.isNotEmpty()
                     matchConstraintPercentWidth = computePercentageWidth(size,if (deviceHasButtons) 300 else 200) //  200 left for buttons and header if no actions, 300 otherwise
                 }
             })

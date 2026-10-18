@@ -79,14 +79,13 @@
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:gravity="center"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/chunk_call_name_address"
+            app:layout_constraintBottom_toTopOf="@+id/door_action_banner"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toRightOf="parent"
             app:layout_constraintDimensionRatio="H,4:3"
             app:layout_constraintWidth_percent="0.85"
             android:visibility='@{callmodel.videoFullScreen ? View.INVISIBLE : View.VISIBLE, default = "visible"}'>
-            >
             <include
                 android:id="@+id/chunk_call_device_icon_or_video"
                 layout="@layout/chunk_call_device_icon_or_video"
@@ -96,6 +95,100 @@
                 bind:incomingView="@{true}"/>
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/door_action_banner"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/bg_door_action_banner"
+            android:elevation="4dp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/silent_timer_container"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent">
+
+            <ProgressBar
+                android:id="@+id/door_action_spinner"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginEnd="10dp"
+                android:indeterminate="true" />
+
+            <ImageView
+                android:id="@+id/door_action_icon"
+                android:layout_width="22dp"
+                android:layout_height="22dp"
+                android:layout_marginEnd="10dp"
+                android:src="@drawable/notification_door"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/door_action_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:text="Opening door..." />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/silent_timer_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:layout_marginBottom="10dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="gone"
+            app:layout_constraintBottom_toTopOf="@+id/actions"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent">
+
+            <TextView
+                android:id="@+id/silent_timer_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                style='@{"call_action_button"}'
+                android:text="Video preview — auto-closing in 30s" />
+
+            <ProgressBar
+                android:id="@+id/silent_timer_progress"
+                style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                android:layout_width="240dp"
+                android:layout_height="6dp"
+                android:max="1000"
+                android:progress="1000" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/actions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            app:layout_constraintBottom_toTopOf="@+id/buttons"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            android:gravity="center">
+
+            <include
+                layout="@layout/chunk_call_in_progress_actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="@{callmodel.actions.size() > 0 ? View.VISIBLE : View.GONE}"
+                bind:callmodel="@{callmodel}" />
+        </LinearLayout>
 
         <LinearLayout
             android:id="@+id/buttons"
@@ -114,6 +207,36 @@
                 bind:callmodel="@{callmodel}" />
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/answered_elsewhere_card"
+            android:layout_width="300dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:elevation="12dp"
+            android:visibility="gone"
+            roundRectWithColor='@{"color_d"}'
+            andRadius='@{"device_in_device_list_corner_radius"}'
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent">
+
+            <ImageView
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginBottom="12dp"
+                tint='@{"color_a"}'
+                src='@{"icons/phone"}' />
+
+            <TextView
+                android:id="@+id/answered_elsewhere_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                style='@{"view_sub_title"}'
+                android:text="Call was answered on another device" />
+        </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

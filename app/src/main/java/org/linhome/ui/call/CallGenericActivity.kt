@@ -27,6 +27,7 @@ import android.view.WindowManager
 import com.google.android.gms.common.images.Size
 import org.linhome.GenericActivity
 import org.linhome.LinhomeApplication.Companion.coreContext
+import org.linhome.customisation.Theme
 import org.linphone.core.Call
 import org.linphone.core.tools.Log
 
@@ -39,10 +40,10 @@ abstract class CallGenericActivity : GenericActivity() {
         super.onCreate(savedInstanceState)
 
         val decorView: View = window.decorView
-        val uiOptions: Int =
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        decorView.systemUiVisibility = uiOptions
+        decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
         window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        window.statusBarColor = Theme.getColor("color_b")
+        window.navigationBarColor = Theme.getColor("color_j")
 
 
         if (intent.getBooleanExtra("closeAppUponCallFinish", false)) {

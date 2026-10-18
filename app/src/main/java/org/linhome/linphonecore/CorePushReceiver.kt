@@ -22,11 +22,16 @@ package org.linhome.linphonecore
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import org.linhome.LinhomeApplication
 import org.linhome.LinhomeApplication.Companion.ensureCoreExists
 import org.linphone.mediastream.Log
 
 class CorePushReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (LinhomeApplication.contextExists() && !LinhomeApplication.corePreferences.appEnabled) {
+            Log.i("[Push Receiver] App is disabled, ignoring push notification")
+            return
+        }
         ensureCoreExists(context.applicationContext)
         Log.i("[Push Receiver] Push notification received")
     }

@@ -31,7 +31,9 @@ import kotlinx.coroutines.launch
 import org.linhome.LinhomeApplication
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.LinhomeApplication.Companion.corePreferences
+import org.linhome.compatibility.Compatibility
 import org.linhome.customisation.DeviceTypes
+import org.linhome.customisation.Texts
 import org.linhome.entities.Action
 import org.linhome.entities.Device
 import org.linhome.entities.HistoryEvent
@@ -47,6 +49,12 @@ import org.linphone.core.Reason
 import org.linphone.core.tools.Log
 
 
+enum class ActionFeedbackState {
+    IDLE,
+    IN_PROGRESS,
+    COMPLETED
+}
+
 class CallViewModelFactory(private val call: Call) :
     ViewModelProvider.NewInstanceFactory() {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -55,6 +63,8 @@ class CallViewModelFactory(private val call: Call) :
 }
 
 class CallViewModel(val call: Call) : ViewModel() {
+    val actionFeedbackState = MutableLiveData<ActionFeedbackState>(ActionFeedbackState.IDLE)
+    val actionFeedbackText = MutableLiveData<String>("")
     val device: MutableLiveData<Device?> =
         MutableLiveData(DeviceStore.findDeviceByAddress(call.remoteAddress))
     val defaultDeviceType: MutableLiveData<String?> = MutableLiveData(DeviceTypes.defaultType)
@@ -73,6 +83,7 @@ class CallViewModel(val call: Call) : ViewModel() {
     val videoSize = MutableLiveData<Size>()
 
     private var historyEvent: HistoryEvent
+    private var pendingActionAfterSilentAccept: Action? = null
 
     private var callListener = object : CallListenerStub() {
         override fun onStateChanged(call: Call, cstate: Call.State?, message: String) {
@@ -141,14 +152,31 @@ class CallViewModel(val call: Call) : ViewModel() {
         GlobalScope.launch(context = Dispatchers.Main) {
             if (cstate == Call.State.IncomingReceived) {
                 call.extendedAcceptEarlyMedia()
-            } else
-                if (cstate == Call.State.StreamsRunning && call.callLog?.dir == Call.Dir.Outgoing) {
-                    if (!call.isRecording) {
+            } else if (cstate == Call.State.Connected || cstate == Call.State.StreamsRunning) {
+                if (coreContext.isCallSilentlyAccepted(call)) {
+                    coreContext.core.stopRinging()
+                    coreContext.core.stopDtmf()
+                    coreContext.core.isMicEnabled = false
+                    call.setSpeakerMuted(true)
+                    call.setMicrophoneMuted(true)
+                    microphoneMuted.value = true
+                    call.muteAudioPLayBack()
+                    if (cstate == Call.State.StreamsRunning) {
+                        val actionToRun = pendingActionAfterSilentAccept
+                        pendingActionAfterSilentAccept = null
+                        if (actionToRun != null) {
+                            delay(150)
+                            executeActionNow(actionToRun)
+                        }
+                    }
+                } else if (cstate == Call.State.StreamsRunning && call.callLog?.dir == Call.Dir.Outgoing) {
+                    if (corePreferences.saveCallVideos && !call.isRecording) {
                         call.startRecording()
                     }
                     coreContext.core.forceSpeakerAudioRoute()
                     speakerDisabled.value = false
                 }
+            }
         }
     }
 
@@ -174,7 +202,15 @@ class CallViewModel(val call: Call) : ViewModel() {
 
 
     fun decline() {
-        call.decline(Reason.Declined)
+        if (call.state == Call.State.IncomingReceived ||
+            call.state == Call.State.IncomingEarlyMedia ||
+            call.state == Call.State.EarlyUpdating ||
+            call.state == Call.State.EarlyUpdatedByRemote
+        ) {
+            call.decline(Reason.Declined)
+        } else {
+            call.terminate()
+        }
     }
 
     fun cancel() {
@@ -215,16 +251,57 @@ class CallViewModel(val call: Call) : ViewModel() {
     }
 
     fun performAction(action: Action) {
+        Compatibility.vibrateActionFeedback()
+        actionFeedbackState.value = ActionFeedbackState.IN_PROGRESS
+        val actionTextName = Texts.get(action.typeName() ?: "") ?: Texts.get("door_opening_in_progress")
+        actionFeedbackText.value = Texts.get("action_sending", actionTextName) ?: Texts.get("door_opening_in_progress")
+
+        if (call.state == Call.State.IncomingReceived ||
+            call.state == Call.State.IncomingEarlyMedia ||
+            call.state == Call.State.EarlyUpdating ||
+            call.state == Call.State.EarlyUpdatedByRemote
+        ) {
+            Log.i("[CallViewModel] Action requested before answering (${action.code}); silently accepting SIP call to stop ringing elsewhere and send action")
+            pendingActionAfterSilentAccept = action
+            coreContext.core.stopRinging()
+            coreContext.core.stopDtmf()
+            coreContext.core.isMicEnabled = false
+            call.setSpeakerMuted(true)
+            call.setMicrophoneMuted(true)
+            call.muteAudioPLayBack()
+            call.extendedAcceptSilent()
+            return
+        }
+        if (coreContext.isCallSilentlyAccepted(call)) {
+            coreContext.startOrResetSilentAcceptTimer(call)
+        }
+        executeActionNow(action)
+    }
+
+    private fun executeActionNow(action: Action) {
         val actionMethodType = device.value?.let { d->
             d.actionsMethodType
         } ?: corePreferences.defaultActionsMethodType
         Log.i("[CallViewModel] received user request to send DTMF: ${action.code} via $actionMethodType")
+
+        Compatibility.vibrateActionFeedback()
+        actionFeedbackState.value = ActionFeedbackState.COMPLETED
+        actionFeedbackText.value = Texts.get("door_opened_confirmed")
+
+        GlobalScope.launch(context = Dispatchers.Main) {
+            delay(2500)
+            if (actionFeedbackState.value == ActionFeedbackState.COMPLETED) {
+                actionFeedbackState.value = ActionFeedbackState.IDLE
+            }
+        }
+
         when (actionMethodType) {
             "method_dtmf_sip_info" -> {
                 coreContext.core.useRfc2833ForDtmf = false
                 coreContext.core.useInfoForDtmf = true
                 action.code?.let {
                     call.sendDtmfs(it)
+                    coreContext.core.stopDtmf()
                     DialogUtil.toast("action_sent", oneArg = action.actionText())
                 }
             }
@@ -233,6 +310,7 @@ class CallViewModel(val call: Call) : ViewModel() {
                 coreContext.core.useRfc2833ForDtmf = true
                 action.code?.let {
                     call.sendDtmfs(it)
+                    coreContext.core.stopDtmf()
                     DialogUtil.toast("action_sent", oneArg = action.actionText())
                 }
             }
@@ -253,6 +331,7 @@ class CallViewModel(val call: Call) : ViewModel() {
 
     fun extendedAccept() {
         call.extendedAccept()
+        callState.value = call.state
     }
 
 

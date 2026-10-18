@@ -25,11 +25,13 @@ import android.app.TaskStackBuilder
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.view.TextureView
 import android.widget.RemoteViews
+import android.widget.Toast
 import androidx.annotation.RequiresPermission
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -90,6 +92,7 @@ class NotificationsManager(private val context: Context) {
     companion object {
         const val INTENT_NOTIF_ID = "NOTIFICATION_ID"
         const val INTENT_HANGUP_CALL_NOTIF_ACTION = "org.linhome.HANGUP_CALL_ACTION"
+        const val INTENT_OPEN_DOOR_NOTIF_ACTION = "org.linhome.OPEN_DOOR_ACTION"
 
         private const val SERVICE_NOTIF_ID = 1
         private const val MISSED_CALLS_NOTIF_ID = 2
@@ -125,9 +128,9 @@ class NotificationsManager(private val context: Context) {
                 Call.State.Released -> {
                     if (call.callLog?.status == Call.Status.Missed) {
                         displayMissedCallNotification(call)
-                    } else if (call.callLog?.status == Call.Status.DeclinedElsewhere) {
+                    } else if (corePreferences.notifyAnsweredElsewhere && call.callLog?.status == Call.Status.DeclinedElsewhere) {
                         displayElsewhere(call,true)
-                    } else if (call.callLog?.status == Call.Status.AcceptedElsewhere) {
+                    } else if (corePreferences.notifyAnsweredElsewhere && call.callLog?.status == Call.Status.AcceptedElsewhere) {
                         displayElsewhere(call,false)
                     }
                 }
@@ -142,7 +145,7 @@ class NotificationsManager(private val context: Context) {
     private lateinit var notificationBuilder: NotificationCompat.Builder
     private var callListener = object : CallListenerStub() {
         override fun onStateChanged(call: Call, cstate: Call.State?, message: String) {
-            if (cstate != Call.State.IncomingEarlyMedia || cstate != Call.State.IncomingReceived)
+            if (cstate != Call.State.IncomingEarlyMedia && cstate != Call.State.IncomingReceived)
                 incomingCallSnapshotTimer?.cancel()
         }
 
@@ -151,24 +154,84 @@ class NotificationsManager(private val context: Context) {
             if (call != null) {
                 call.takeVideoSnapshot(call.callLog.historyEvent().mediaThumbnail.absolutePath)
                 GlobalScope.launch(context = Dispatchers.Main) {
-                    delay(1000)
+                    delay(800)
                     call.callLog.historyEvent().mediaThumbnail.also {
                         if (it.existsAndIsNotEmpty() && it.length() != fileLenght && !LinhomeApplication.someActivityRunning) {
                             fileLenght = it.length()
-                            val remoteView =
-                                fillIncomingRemoteViewsForCall(call, true)
-                            val awt = AppWidgetTarget(
-                                context.applicationContext,
-                                R.id.caller_picture,
-                                remoteView,
-                                0
-                            )
-                            Glide.with(context.applicationContext).asBitmap().load(it).into(awt)
-                            notificationBuilder.setCustomBigContentView(remoteView)
-                            notificationBuilder.setCustomContentView(remoteView)
+                            val bitmap = BitmapFactory.decodeFile(it.absolutePath)
+                            val notifiable = getNotifiableForCall(call)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && bitmap != null) {
+                                val displayName =
+                                    DeviceStore.findDeviceByAddress(call.remoteAddress)?.name ?: call.remoteAddress.username
+                                val hasVideo = call.remoteParams?.isVideoEnabled ?: true
+                                val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java).apply {
+                                    putExtra("callId", call.callLog.callId)
+                                    putExtra("closeAppUponCallFinish", true)
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                val pendingIntent = PendingIntent.getActivity(
+                                    context,
+                                    0,
+                                    incomingCallNotificationIntent,
+                                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                                )
+                                val notificationTrampolineActivityIntent =
+                                    Intent(context.applicationContext, MainActivity::class.java).apply {
+                                        putExtra("acceptCall", true)
+                                    }
+                                val acceptPendingIntent = TaskStackBuilder.create(context).run {
+                                    addNextIntentWithParentStack(notificationTrampolineActivityIntent)
+                                    getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                                }
+                                notificationBuilder =
+                                    NotificationCompat.Builder(context, Texts.get("notification_channel_incoming_call_id"))
+                                        .setSmallIcon(R.drawable.notification_phone)
+                                        .setContentTitle(displayName)
+                                        .setContentText(Texts.get(if (hasVideo) "notif_incoming_call_video" else "notif_incoming_call_audio"))
+                                        .setLargeIcon(bitmap)
+                                        .setStyle(
+                                            NotificationCompat.BigPictureStyle()
+                                                .bigPicture(bitmap)
+                                                .bigLargeIcon(null as Bitmap?)
+                                                .showBigPictureWhenCollapsed(true)
+                                        )
+                                        .setContentIntent(pendingIntent)
+                                        .setCategory(NotificationCompat.CATEGORY_CALL)
+                                        .setPriority(NotificationCompat.PRIORITY_MAX)
+                                        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                                        .setWhen(System.currentTimeMillis())
+                                        .setAutoCancel(false)
+                                        .setShowWhen(true)
+                                        .setOngoing(true)
+                                        .setColor(ContextCompat.getColor(context, R.color.color_a))
+                                        .setFullScreenIntent(pendingIntent, true)
+                                        .addAction(getCallDeclineAction(notifiable.notificationId))
+                                        .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+                                if (acceptPendingIntent != null) {
+                                    notificationBuilder.addAction(
+                                        R.drawable.notification_phone,
+                                        Texts.get("call_button_accept"),
+                                        acceptPendingIntent
+                                    )
+                                }
+                            } else {
+                                val remoteView = fillIncomingRemoteViewsForCall(call, true)
+                                val awt = AppWidgetTarget(
+                                    context.applicationContext,
+                                    R.id.caller_picture,
+                                    remoteView,
+                                    0
+                                )
+                                Glide.with(context.applicationContext).asBitmap().load(it).into(awt)
+                                if (bitmap != null) {
+                                    notificationBuilder.setLargeIcon(bitmap)
+                                }
+                                notificationBuilder.setCustomBigContentView(remoteView)
+                                notificationBuilder.setCustomContentView(remoteView)
+                            }
                             val notification = notificationBuilder.build()
-                            if (!LinhomeApplication.someActivityRunning && call.state == Call.State.IncomingEarlyMedia)
-                                notify(getNotifiableForCall(call).notificationId, notification)
+                            if (!LinhomeApplication.someActivityRunning && (call.state == Call.State.IncomingEarlyMedia || call.state == Call.State.IncomingReceived))
+                                notify(notifiable.notificationId, notification)
                         }
                     }
                 }
@@ -513,18 +576,16 @@ class NotificationsManager(private val context: Context) {
 
         val declineAction = getCallDeclineAction(notifiable.notificationId)
 
-        val acceptPendingIntent = if (!coreContext.gsmCallActive()) {
-            val notificationTrampolineActivityIntent =
-                Intent(context.applicationContext, MainActivity::class.java)
-            notificationTrampolineActivityIntent.putExtra("acceptCall", true)
-            TaskStackBuilder.create(context).run {
-                addNextIntentWithParentStack(notificationTrampolineActivityIntent)
-                getPendingIntent(
-                    0, PendingIntent.FLAG_UPDATE_CURRENT or
-                            PendingIntent.FLAG_IMMUTABLE
-                )
-            }
-        } else null
+        val notificationTrampolineActivityIntent =
+            Intent(context.applicationContext, MainActivity::class.java)
+        notificationTrampolineActivityIntent.putExtra("acceptCall", true)
+        val acceptPendingIntent = TaskStackBuilder.create(context).run {
+            addNextIntentWithParentStack(notificationTrampolineActivityIntent)
+            getPendingIntent(
+                0, PendingIntent.FLAG_UPDATE_CURRENT or
+                        PendingIntent.FLAG_IMMUTABLE
+            )
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Use CallStyle on API 31+ for proper system handling on lock screen
@@ -553,6 +614,7 @@ class NotificationsManager(private val context: Context) {
                     .setOngoing(true)
                     .setColor(Color.WHITE)
                     .setFullScreenIntent(pendingIntent, true)
+                    .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
         } else {
             notificationBuilder =
                 NotificationCompat.Builder(context, Texts.get("notification_channel_incoming_call_id"))
@@ -571,6 +633,7 @@ class NotificationsManager(private val context: Context) {
                     .setColor(ContextCompat.getColor(context, R.color.color_a))
                     .setFullScreenIntent(pendingIntent, true)
                     .addAction(declineAction)
+                    .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
                     .setCustomContentView(fillIncomingRemoteViewsForCall(call, false))
                     .setCustomBigContentView(fillIncomingRemoteViewsForCall(call, false))
 
@@ -650,6 +713,17 @@ class NotificationsManager(private val context: Context) {
 
     @RequiresPermission("android.permission.POST_NOTIFICATIONS")
     fun displayElsewhere(call: Call, declined: Boolean) {
+        val detailText = if (declined) {
+            Texts.get("call_declined_elsewhere_banner")
+        } else {
+            coreContext.extractAnsweredElsewhereBannerText(call)
+        }
+
+        if (!LinhomeApplication.someActivityRunning) {
+            GlobalScope.launch(context = Dispatchers.Main) {
+                Toast.makeText(context, detailText, Toast.LENGTH_LONG).show()
+            }
+        }
 
         val pendingIntent = NavDeepLinkBuilder(context)
             .setComponentName(MainActivity::class.java)
@@ -661,6 +735,7 @@ class NotificationsManager(private val context: Context) {
             context, Texts.get("notification_channel_incoming_call_id")
         )
             .setContentTitle(Texts.get(if (declined) "notif_declined_elsewhere_call_title" else "notif_accepted_elsewhere_call_title"))
+            .setContentText(detailText)
             .setSmallIcon((if (declined) R.drawable.notification_decline else R.drawable.notification_phone))
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
@@ -692,7 +767,7 @@ class NotificationsManager(private val context: Context) {
                 iconResourceId = R.drawable.notification_phone
             }
             else -> {
-                callActivity = CallInProgressActivity::class.java
+                callActivity = if (coreContext.isCallSilentlyAccepted(call)) CallIncomingActivity::class.java else CallInProgressActivity::class.java
                 stringResourceId = Texts.get("notif_in_call")
                 iconResourceId = R.drawable.notification_phone
             }
@@ -707,8 +782,7 @@ class NotificationsManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-
-        val notification = NotificationCompat.Builder(
+        val builder = NotificationCompat.Builder(
             context, Texts.get("notification_channel_service_id")
         )
             .setContentTitle(
@@ -727,7 +801,22 @@ class NotificationsManager(private val context: Context) {
             .setOngoing(true)
             .setColor(Theme.getColor("color_s"))
             .addAction(getCallDeclineAction(notifiable.notificationId))
-            .build()
+            .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+
+        val thumbnailFile = call.callLog?.historyEvent()?.mediaThumbnail
+        if (thumbnailFile != null && thumbnailFile.existsAndIsNotEmpty()) {
+            val bitmap = BitmapFactory.decodeFile(thumbnailFile.absolutePath)
+            if (bitmap != null) {
+                builder.setLargeIcon(bitmap)
+                builder.setStyle(
+                    NotificationCompat.BigPictureStyle()
+                        .bigPicture(bitmap)
+                        .bigLargeIcon(null as Bitmap?)
+                )
+            }
+        }
+
+        val notification = builder.build()
         notify(notifiable.notificationId, notification)
 
         if (useAsForeground) {
@@ -763,5 +852,24 @@ class NotificationsManager(private val context: Context) {
         ).build()
     }
 
+    private fun getCallOpenDoorAction(callId: Int, call: Call): NotificationCompat.Action {
+        val openDoorIntent = Intent(context, NotificationBroadcastReceiver::class.java)
+        openDoorIntent.action = INTENT_OPEN_DOOR_NOTIF_ACTION
+        openDoorIntent.putExtra(INTENT_NOTIF_ID, callId)
+
+        val openDoorPendingIntent = PendingIntent.getBroadcast(
+            context, callId + 1000, openDoorIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
+        val firstActionName = device?.actions?.firstOrNull()?.actionText()
+            ?: Texts.get("call_open_door_button")
+
+        return NotificationCompat.Action.Builder(
+            R.drawable.notification_door,
+            firstActionName,
+            openDoorPendingIntent
+        ).build()
+    }
 
 }

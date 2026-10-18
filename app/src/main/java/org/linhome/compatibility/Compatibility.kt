@@ -160,6 +160,28 @@ class Compatibility {
             }
         }
 
+        fun vibrateActionFeedback() {
+            try {
+                val v = LinhomeApplication.coreContext.context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+                if (!v.hasVibrator()) return
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val timings = longArrayOf(0, 60, 50, 90)
+                    val amplitudes = intArrayOf(0, 180, 0, 255)
+                    val effect = android.os.VibrationEffect.createWaveform(timings, amplitudes, -1)
+                    val attrs = android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                    v.vibrate(effect, attrs)
+                } else {
+                    @Suppress("DEPRECATION")
+                    v.vibrate(longArrayOf(0, 60, 50, 90), -1)
+                }
+            } catch (e: Exception) {
+                org.linphone.core.tools.Log.e("[Compatibility] vibrateActionFeedback error: $e")
+            }
+        }
+
         fun setColorFilter(
             drawable: Drawable,
             color: Int

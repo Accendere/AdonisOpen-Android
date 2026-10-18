@@ -35,9 +35,11 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import androidx.lifecycle.MutableLiveData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -46,8 +48,12 @@ import org.linhome.LinhomeApplication
 import org.linhome.LinhomeApplication.Companion.corePreferences
 import org.linhome.R
 import org.linhome.compatibility.Compatibility
+import org.linhome.customisation.Texts
+import org.linhome.entities.Action
 import org.linhome.linphonecore.extensions.extendedAccept
+import org.linhome.linphonecore.extensions.extendedAcceptSilent
 import org.linhome.notifications.NotificationsManager
+import org.linhome.store.DeviceStore
 import org.linhome.ui.call.CallInProgressActivity
 import org.linhome.ui.call.CallIncomingActivity
 import org.linhome.ui.call.CallOutgoingActivity
@@ -76,6 +82,10 @@ class CoreContext(
     service: CoreService? = null,
     useAutoStartDescription: Boolean = false
 ) {
+    companion object {
+        const val SILENT_ACCEPT_DURATION_MS = 30_000L
+    }
+
     var stopped = false
     val core: Core
     var closeAppUponCallFinish = false
@@ -100,8 +110,171 @@ class CoreContext(
     private var overlayY = 0f
     private var callOverlay: View? = null
     private var isVibrating = false
+    private val silentlyAcceptedCallIds = HashSet<String>()
+    private val silentAcceptJobs = HashMap<String, Job>()
+    val silentAcceptRemainingMs = MutableLiveData<Long>(0L)
+    val lastCallStateMessage = HashMap<String, String>()
 
     val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    fun markCallSilentlyAccepted(call: Call) {
+        val id = call.callLog?.callId ?: return
+        silentlyAcceptedCallIds.add(id)
+        if (isVibrating) {
+            Log.i("[Context] Stopping vibration on silent accept")
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            vibrator.cancel()
+            isVibrating = false
+        }
+        startOrResetSilentAcceptTimer(call)
+    }
+
+    fun startOrResetSilentAcceptTimer(call: Call) {
+        val id = call.callLog?.callId ?: return
+        silentAcceptJobs[id]?.cancel()
+
+        if (!LinhomeApplication.corePreferences.silentAcceptTimerEnabled) {
+            silentAcceptRemainingMs.postValue(0L)
+            return
+        }
+
+        val durationMs = (LinhomeApplication.corePreferences.silentAcceptTimerSeconds * 1000L).coerceAtLeast(1000L)
+        val deadline = System.currentTimeMillis() + durationMs
+        silentAcceptRemainingMs.postValue(durationMs)
+        silentAcceptJobs[id] = coroutineScope.launch {
+            while (System.currentTimeMillis() < deadline) {
+                if (!silentlyAcceptedCallIds.contains(id)) {
+                    silentAcceptRemainingMs.value = 0L
+                    return@launch
+                }
+                val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(0L)
+                silentAcceptRemainingMs.value = remaining
+                delay(100)
+            }
+            silentAcceptRemainingMs.value = 0L
+            if (silentlyAcceptedCallIds.contains(id) &&
+                call.state != Call.State.End &&
+                call.state != Call.State.Released &&
+                call.state != Call.State.Error
+            ) {
+                Log.i("[Context] Auto-closing silently accepted call [$id] after timeout")
+                call.terminate()
+            }
+        }
+    }
+
+    fun cancelSilentAcceptTimer(call: Call) {
+        val id = call.callLog?.callId ?: return
+        silentAcceptJobs.remove(id)?.cancel()
+        silentAcceptRemainingMs.postValue(0L)
+    }
+
+    fun isCallSilentlyAccepted(call: Call): Boolean {
+        val id = call.callLog?.callId ?: return false
+        return silentlyAcceptedCallIds.contains(id)
+    }
+
+    fun clearSilentlyAccepted(call: Call) {
+        call.callLog?.callId?.let { id ->
+            silentlyAcceptedCallIds.remove(id)
+            silentAcceptJobs.remove(id)?.cancel()
+            silentAcceptRemainingMs.postValue(0L)
+        }
+    }
+
+    fun executeActionForCall(call: Call, action: Action) {
+        val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
+        val actionMethodType = device?.actionsMethodType ?: corePreferences.defaultActionsMethodType
+        Log.i("[Context] Sending action DTMF/message: ${action.code} via $actionMethodType")
+        when (actionMethodType) {
+            "method_dtmf_sip_info" -> {
+                core.useRfc2833ForDtmf = false
+                core.useInfoForDtmf = true
+                action.code?.let {
+                    call.sendDtmfs(it)
+                    DialogUtil.toast("action_sent", oneArg = action.actionText())
+                }
+            }
+            "method_dtmf_rfc_4733" -> {
+                core.useInfoForDtmf = false
+                core.useRfc2833ForDtmf = true
+                action.code?.let {
+                    call.sendDtmfs(it)
+                    DialogUtil.toast("action_sent", oneArg = action.actionText())
+                }
+            }
+            "method_sip_message" -> {
+                val params = core.createDefaultChatRoomParams()
+                params.isGroupEnabled = false
+                params.isEncryptionEnabled = false
+                var chatRoom = core.searchChatRoom(params, call.remoteAddress, call.remoteAddress, arrayOf(call.remoteAddress!!))
+                if (chatRoom == null) {
+                    chatRoom = core.createChatRoom(params, call.remoteAddress, arrayOf(call.remoteAddress!!))
+                }
+                val message = chatRoom?.createMessageFromUtf8(action.code)
+                message?.send()
+                DialogUtil.toast("action_sent", oneArg = action.actionText())
+            }
+        }
+    }
+
+    fun triggerDoorActionFromNotification(call: Call) {
+        val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
+        val action = device?.actions?.firstOrNull() ?: corePreferences.defaultAction1 ?: Action("action_open_door", "#")
+        if (call.state == Call.State.IncomingReceived ||
+            call.state == Call.State.IncomingEarlyMedia ||
+            call.state == Call.State.EarlyUpdating ||
+            call.state == Call.State.EarlyUpdatedByRemote
+        ) {
+            Log.i("[Context] Notification Open Door clicked before answer; silently accepting and sending ${action.code}")
+            call.extendedAcceptSilent()
+            coroutineScope.launch {
+                var waited = 0
+                while (waited < 4000 && call.state != Call.State.StreamsRunning && call.state != Call.State.End && call.state != Call.State.Released) {
+                    delay(100)
+                    waited += 100
+                }
+                if (call.state == Call.State.StreamsRunning || call.state == Call.State.Connected) {
+                    delay(150)
+                    executeActionForCall(call, action)
+                }
+            }
+        } else {
+            if (isCallSilentlyAccepted(call)) {
+                startOrResetSilentAcceptTimer(call)
+            }
+            executeActionForCall(call, action)
+        }
+    }
+
+    fun extractAnsweredElsewhereBannerText(call: Call): String? {
+        val id = call.callLog?.callId
+        val status = call.callLog?.status
+        val reason = call.reason
+        val rawMsg = (id?.let { lastCallStateMessage[it] } ?: call.errorInfo?.phrase ?: "").trim()
+        val isAnsweredElsewhere = reason?.name?.contains("AnsweredElsewhere", ignoreCase = true) == true ||
+                status == Call.Status.AcceptedElsewhere ||
+                rawMsg.contains("completed elsewhere", ignoreCase = true) ||
+                rawMsg.contains("answered elsewhere", ignoreCase = true)
+        val isDeclinedElsewhere = status == Call.Status.DeclinedElsewhere
+        if (!isAnsweredElsewhere && !isDeclinedElsewhere) {
+            return null
+        }
+        if (isDeclinedElsewhere) {
+            return Texts.get("call_declined_elsewhere_banner")
+        }
+        val customWho = call.remoteParams?.getCustomHeader("Answered-By")
+            ?: call.remoteParams?.getCustomHeader("X-Answered-By")
+            ?: run {
+                val regex = Regex("(?:answered|taken|completed)\\s+by\\s+([\\w\\s.@+-]+)", RegexOption.IGNORE_CASE)
+                regex.find(rawMsg)?.groupValues?.getOrNull(1)?.trim()
+            }
+        return if (!customWho.isNullOrBlank()) {
+            Texts.get("call_answered_elsewhere_by_banner", customWho)
+        } else {
+            Texts.get("call_answered_elsewhere_banner")
+        }
+    }
 
 
     fun gsmCallActive() : Boolean {
@@ -128,8 +301,16 @@ class CoreContext(
             state: Call.State,
             message: String
         ) {
-            Log.i("[Context] Call state changed [$state]")
+            Log.i("[Context] Call state changed [$state] ($message)")
+            if (message.isNotBlank()) {
+                call.callLog?.callId?.let { lastCallStateMessage[it] = message }
+            }
             if (state == Call.State.IncomingReceived) {
+                if (!corePreferences.appEnabled) {
+                    Log.i("[Context] App is disabled by user preference, declining incoming call")
+                    call.decline(Reason.TemporarilyUnavailable)
+                    return
+                }
 
                 if (core.callsNb > 1) {
                     call.decline(Reason.Busy)
@@ -184,8 +365,10 @@ class CoreContext(
                         Log.i("[Context] Scheduling auto answering in $autoAnswerDelay milliseconds")
                         timer.schedule(object : TimerTask() {
                             override fun run() {
-                                Log.w("[Context] Auto answering call")
-                                answerCall(call)
+                                if (!isCallSilentlyAccepted(call) && (call.state == Call.State.IncomingReceived || call.state == Call.State.IncomingEarlyMedia)) {
+                                    Log.w("[Context] Auto answering call")
+                                    answerCall(call)
+                                }
                             }
                         }, autoAnswerDelay.toLong())
                     }
@@ -200,8 +383,13 @@ class CoreContext(
                     isVibrating = false
                 }
 
-                onCallStarted(call)
+                if (!isCallSilentlyAccepted(call)) {
+                    onCallStarted(call)
+                } else {
+                    Log.i("[Context] Call is silently accepted for pre-answer action, staying in incoming view")
+                }
             } else if (state == Call.State.End || state == Call.State.Error || state == Call.State.Released) {
+                clearSilentlyAccepted(call)
                 if (core.callsNb == 0) {
                     if (isVibrating) {
                         Log.i("[Context] Stopping vibration")
@@ -251,7 +439,7 @@ class CoreContext(
 
         initPhoneStateListener()
 
-        if (corePreferences.keepServiceAlive && Compatibility.hasPermission(context,
+        if (corePreferences.keepServiceAlive && corePreferences.appEnabled && Compatibility.hasPermission(context,
                 POST_NOTIFICATIONS)) {
             org.linphone.core.tools.Log.i("[Context] Background mode setting is enabled, starting Service")
             notificationsManager.startForeground()
@@ -376,7 +564,11 @@ class CoreContext(
                 MotionEvent.ACTION_UP -> {
                     if (abs(overlayX - params.x) < 5 && abs(overlayY - params.y) < 5) {
                         core.currentCall?.also {
-                            onCallStarted(it)
+                            if (isCallSilentlyAccepted(it)) {
+                                onIncomingReceived(it)
+                            } else {
+                                onCallStarted(it)
+                            }
                         }
                     }
                     overlayX = params.x.toFloat()
@@ -442,7 +634,7 @@ class CoreContext(
         context.startActivity(intent)
     }
 
-    private fun onCallStarted(call: Call) {
+    fun onCallStarted(call: Call) {
         val intent = Intent(context, CallInProgressActivity::class.java)
         intent.putExtra("callId", call.callLog.callId)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

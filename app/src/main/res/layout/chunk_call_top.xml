@@ -32,16 +32,16 @@
             android:layout_height="30dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_linhome_icon"
-            src='@{"others/linhome_icon"}'
+            src='@{"others/adonis_open"}'
             />
 
         <ImageView
-            android:layout_width="62dp"
+            android:layout_width="105dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="12dp"
+            android:layout_marginStart="10dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_linhome_icon"
-            src='@{"others/linhome_text"}'
+            src='@{"others/adonis_text"}'
             />
         </LinearLayout>
 

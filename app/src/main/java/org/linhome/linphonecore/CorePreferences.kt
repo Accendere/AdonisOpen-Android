@@ -56,6 +56,55 @@ class CorePreferences constructor(private val context: Context) {
             config.setBool("devices", "latest_snapshot", value)
         }
 
+    var appTheme: String
+        get() = config.getString("app", "theme", "orange") ?: "orange"
+        set(value) {
+            config.setString("app", "theme", value)
+            config.sync()
+        }
+
+    var appEnabled: Boolean
+        get() = config.getBool("app", "app_enabled", true)
+        set(value) {
+            config.setBool("app", "app_enabled", value)
+            config.sync()
+        }
+
+    var saveCallVideos: Boolean
+        get() = config.getBool("app", "save_call_videos", true)
+        set(value) {
+            config.setBool("app", "save_call_videos", value)
+            config.sync()
+        }
+
+    var historyRetentionDays: Int
+        get() = config.getInt("app", "history_retention_days", 2)
+        set(value) {
+            config.setInt("app", "history_retention_days", value)
+            config.sync()
+        }
+
+    var notifyAnsweredElsewhere: Boolean
+        get() = config.getBool("app", "notify_answered_elsewhere", false)
+        set(value) {
+            config.setBool("app", "notify_answered_elsewhere", value)
+            config.sync()
+        }
+
+    var silentAcceptTimerEnabled: Boolean
+        get() = config.getBool("app", "silent_accept_timer_enabled", true)
+        set(value) {
+            config.setBool("app", "silent_accept_timer_enabled", value)
+            config.sync()
+        }
+
+    var silentAcceptTimerSeconds: Int
+        get() = config.getInt("app", "silent_accept_timer_seconds", 30)
+        set(value) {
+            config.setInt("app", "silent_accept_timer_seconds", value)
+            config.sync()
+        }
+
 
     // Default actions to be displayed when no device is associated with the call. Taken from configuration.
     //[default_actions]
@@ -65,7 +114,7 @@ class CorePreferences constructor(private val context: Context) {
     //action_2... up to 3 actions
 
     val defaultActionsMethodType: String?
-        get() = config.getString("default_actions", "method_type", null)
+        get() = config.getString("default_actions", "method_type", "method_dtmf_rfc_4733")
 
     val defaultAction1: Action?
         get() = config.getString("default_actions", "action_1_type", null)?.let { type ->
@@ -108,7 +157,7 @@ class CorePreferences constructor(private val context: Context) {
         }
 
     var keepServiceAlive: Boolean
-        get() = config.getBool("app", "keep_service_alive", false)
+        get() = config.getBool("app", "keep_service_alive", true)
         set(value) {
             config.setBool("app", "keep_service_alive", value)
         }

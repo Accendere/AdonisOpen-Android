@@ -23,7 +23,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import org.linhome.LinhomeApplication.Companion.coreContext
-import org.linhome.linphonecore.extensions.extendedAccept
 import org.linphone.core.Call
 import org.linphone.core.Core
 import org.linphone.core.Reason
@@ -33,23 +32,24 @@ import org.linphone.mediastream.Log
 class NotificationBroadcastReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val notificationId = intent.getIntExtra(NotificationsManager.INTENT_NOTIF_ID, 0)
+        val remoteAddress: String? =
+            coreContext.notificationsManager.getSipUriForCallNotificationId(notificationId)
+        val core: Core = coreContext.core
+        val call = remoteAddress?.let { core.findCallFromUri(it) } ?: core.currentCall ?: core.calls.firstOrNull()
+
+        if (call == null) {
+            Log.e("[Notification Broadcast Receiver] Couldn't find call from remote address $remoteAddress")
+            return
+        }
 
         if (intent.action == NotificationsManager.INTENT_HANGUP_CALL_NOTIF_ACTION) {
-            val remoteAddress: String? =
-                coreContext.notificationsManager.getSipUriForCallNotificationId(notificationId)
-            val core: Core = coreContext.core
-
-            val call = remoteAddress?.let { core.findCallFromUri(it) }
-            if (call == null) {
-                Log.e("[Notification Broadcast Receiver] Couldn't find call from remote address $remoteAddress")
-                return
-            }
             if (call.state == Call.State.IncomingReceived || call.state == Call.State.IncomingEarlyMedia)
                 call.decline(Reason.Declined)
             else
                 call.terminate()
+        } else if (intent.action == NotificationsManager.INTENT_OPEN_DOOR_NOTIF_ACTION) {
+            coreContext.triggerDoorActionFromNotification(call)
         }
     }
 
 }
-
