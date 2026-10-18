@@ -184,7 +184,7 @@ class NotificationsManager(private val context: Context) {
                                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                                 )
                                 val notificationTrampolineActivityIntent =
-                                    Intent(context.applicationContext, MainActivity::class.java).apply {
+                                    Intent(context.applicationContext, NotificationTrampolineActivity::class.java).apply {
                                         putExtra("acceptCall", true)
                                     }
                                 val acceptPendingIntent = TaskStackBuilder.create(context).run {
@@ -586,7 +586,7 @@ class NotificationsManager(private val context: Context) {
         val declineAction = getCallDeclineAction(notifiable.notificationId)
 
         val notificationTrampolineActivityIntent =
-            Intent(context.applicationContext, MainActivity::class.java)
+            Intent(context.applicationContext, NotificationTrampolineActivity::class.java)
         notificationTrampolineActivityIntent.putExtra("acceptCall", true)
         val acceptPendingIntent = TaskStackBuilder.create(context).run {
             addNextIntentWithParentStack(notificationTrampolineActivityIntent)

@@ -50,36 +50,9 @@ class ReceiveCallsWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_TOGGLE_RECEIVE_CALLS) {
-            val currentEnabled = if (LinhomeApplication.contextExists()) {
-                LinhomeApplication.corePreferences.appEnabled
-            } else {
-                true
-            }
-            val newEnabled = !currentEnabled
-            Log.i("[ReceiveCallsWidget] Toggling receive calls from widget: $currentEnabled -> $newEnabled")
-
-            if (LinhomeApplication.contextExists()) {
-                LinhomeAccount.setAppEnabled(newEnabled)
-            }
-            updateAllWidgets(context)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                try {
-                    android.service.quicksettings.TileService.requestListeningState(
-                        context,
-                        ComponentName(context, ReceiveCallsTileService::class.java)
-                    )
-                } catch (e: Exception) {
-                    Log.e("[ReceiveCallsWidget] Could not update TileService: ${e.message}")
-                }
-            }
-        }
     }
 
     companion object {
-        const val ACTION_TOGGLE_RECEIVE_CALLS = "org.linhome.action.TOGGLE_RECEIVE_CALLS"
-
         fun updateAppWidget(
             context: Context,
             appWidgetManager: AppWidgetManager,
@@ -112,9 +85,8 @@ class ReceiveCallsWidgetProvider : AppWidgetProvider() {
                 if (isEnabled) 0xFF22C55E.toInt() else 0xFFEF4444.toInt()
             )
 
-            val intent = Intent(context, ReceiveCallsWidgetProvider::class.java).apply {
-                action = ACTION_TOGGLE_RECEIVE_CALLS
-            }
+            // Direct intent to internal unexported ReceiveCallsToggleReceiver
+            val intent = Intent(context, ReceiveCallsToggleReceiver::class.java)
             val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             } else {

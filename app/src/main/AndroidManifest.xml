@@ -88,7 +88,7 @@
             android:theme="@style/LinhomeTheme"
             android:screenOrientation="sensor"
             android:excludeFromRecents="true"
-            >
+            android:exported="false">
         </activity>
 
         <activity
@@ -97,7 +97,7 @@
             android:theme="@style/LinhomeTheme"
             android:screenOrientation="sensor"
             android:excludeFromRecents="true"
-            >
+            android:exported="false">
         </activity>
 
         <activity
@@ -106,7 +106,7 @@
             android:theme="@style/LinhomeTheme"
             android:screenOrientation="sensor"
             android:excludeFromRecents="true"
-            >
+            android:exported="false">
         </activity>
 
         <activity
@@ -114,8 +114,14 @@
             android:label="@string/app_name"
             android:theme="@style/LinhomeTheme"
             android:screenOrientation="sensor"
-            >
+            android:exported="false">
         </activity>
+
+        <activity
+            android:name="org.linhome.notifications.NotificationTrampolineActivity"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:excludeFromRecents="true"
+            android:exported="false" />
         <!-- Receivers -->
 
         <receiver android:name="org.linhome.linphonecore.CorePushReceiver"
@@ -173,12 +179,15 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="org.linhome.action.TOGGLE_RECEIVE_CALLS" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_receive_calls_info" />
         </receiver>
+
+        <receiver
+            android:name="org.linhome.widgets.ReceiveCallsToggleReceiver"
+            android:exported="false" />
 
         <service
             android:name="org.linhome.quicksettings.ReceiveCallsTileService"

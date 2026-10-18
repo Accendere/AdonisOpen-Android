@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <files-path name="internal_files" path="." />
+    <files-path name="calls_recordings" path="calls/recordings" />
+    <files-path name="devices_thumbnails" path="devices/thumbnails" />
+    <files-path name="shared" path="shared" />
     <external-files-path name="files" path="." />
 </paths>

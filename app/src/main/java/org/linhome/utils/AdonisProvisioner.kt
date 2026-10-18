@@ -118,8 +118,26 @@ object AdonisProvisioner {
         return null
     }
 
+    private fun sanitizeUriForLog(uri: Uri): String {
+        return try {
+            val builder = uri.buildUpon().clearQuery()
+            for (param in uri.queryParameterNames) {
+                val lower = param.lowercase()
+                if (lower.contains("pass") || lower.contains("pwd") || lower.contains("data") ||
+                    lower.contains("payload") || lower.contains("config") || lower.contains("key") || lower.contains("secret")) {
+                    builder.appendQueryParameter(param, "REDACTED")
+                } else {
+                    builder.appendQueryParameter(param, uri.getQueryParameter(param))
+                }
+            }
+            builder.build().toString()
+        } catch (_: Exception) {
+            "${uri.scheme}://${uri.host ?: "configure"}..."
+        }
+    }
+
     fun parseUri(uri: Uri): AdonisConfig? {
-        Log.i("$TAG Parsing URI: $uri")
+        Log.i("$TAG Parsing URI: ${sanitizeUriForLog(uri)}")
         // Check for base64 encoded data parameter: adonis://configure?data=... or ?config=...
         val rawData = uri.getQueryParameter("data") ?: uri.getQueryParameter("config") ?: uri.getQueryParameter("payload")
         if (!rawData.isNullOrBlank()) {
@@ -135,7 +153,15 @@ object AdonisProvisioner {
         // Check for remote XML provisioning URL: adonis://configure?url=...
         val remoteUrl = uri.getQueryParameter("url") ?: uri.getQueryParameter("xml")
         if (!remoteUrl.isNullOrBlank()) {
-            return AdonisConfig(remoteProvisioningUrl = remoteUrl)
+            val trimmedUrl = remoteUrl.trim()
+            val parsedUrl = try { Uri.parse(trimmedUrl) } catch (_: Exception) { null }
+            val scheme = parsedUrl?.scheme?.lowercase()
+            if (scheme == "https" || scheme == "http") {
+                return AdonisConfig(remoteProvisioningUrl = trimmedUrl)
+            } else {
+                Log.w("$TAG Rejected remote provisioning URL with unsupported scheme: $scheme")
+                return null
+            }
         }
 
         // Direct query parameters: adonis://configure?user=...&pass=...&domain=...
@@ -243,11 +269,17 @@ object AdonisProvisioner {
                 }
             }
 
-            val remoteUrl = root.optString("url").ifEmpty { root.optString("xml") }
+            val remoteUrl = root.optString("url").ifEmpty { root.optString("xml") }.trim()
+            val validRemoteUrl = if (remoteUrl.isNotEmpty()) {
+                val parsedUrl = try { Uri.parse(remoteUrl) } catch (_: Exception) { null }
+                val scheme = parsedUrl?.scheme?.lowercase()
+                if (scheme == "https" || scheme == "http") remoteUrl else null
+            } else null
+
             AdonisConfig(
                 sip = sipConfig,
                 devices = devicesList,
-                remoteProvisioningUrl = if (remoteUrl.isNotEmpty()) remoteUrl else null
+                remoteProvisioningUrl = validRemoteUrl
             )
         } catch (e: Exception) {
             Log.e("$TAG Error parsing JSON config: $e")

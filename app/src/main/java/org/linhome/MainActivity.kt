@@ -184,10 +184,6 @@ class MainActivity : GenericActivity() {
             binding.appbar.contentmain.tabbarHistory.performClick()
         }
 
-        if (intent.extras?.getBoolean("acceptCall") == true) {
-            LinhomeApplication.coreContext.core.currentCall?.extendedAccept()
-        }
-
         ViewCompat.setOnApplyWindowInsetsListener(binding.appbar.contentmain.tabbar) { view, insets ->
             val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             view.setPadding(view.paddingLeft, view.paddingTop, view.paddingRight, navBarInsets.bottom)
@@ -239,6 +235,19 @@ class MainActivity : GenericActivity() {
             dialogView.findViewById<android.widget.TextView>(R.id.sip_transport_text).text = (config.sip.transport ?: "UDP").uppercase()
         } else {
             sipCard.visibility = View.GONE
+        }
+
+        // Populate Remote Provisioning URL details
+        val remoteUrlCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.remote_url_card)
+        if (!config.remoteProvisioningUrl.isNullOrBlank()) {
+            remoteUrlCard.visibility = View.VISIBLE
+            val urlText = dialogView.findViewById<android.widget.TextView>(R.id.remote_url_text)
+            val warningText = dialogView.findViewById<android.widget.TextView>(R.id.remote_url_insecure_warning)
+            urlText.text = config.remoteProvisioningUrl
+            val isHttps = config.remoteProvisioningUrl.startsWith("https://", ignoreCase = true)
+            warningText.visibility = if (isHttps) View.GONE else View.VISIBLE
+        } else {
+            remoteUrlCard.visibility = View.GONE
         }
 
         // Populate Devices details
