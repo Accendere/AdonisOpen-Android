@@ -32,14 +32,19 @@ import org.linphone.core.tools.Log
 import java.util.Collections
 import java.util.LinkedHashMap
 
+data class ContactInfo(
+    val name: String,
+    val photoUri: String? = null
+)
+
 object ContactsHelper {
     private const val TAG = "[ContactsHelper]"
     private const val MAX_CACHE_SIZE = 128
 
-    // Cache of phoneNumber -> resolvedContactName (empty string represents "not found in contacts")
+    // Cache of phoneNumber -> ContactInfo (empty name indicates "not found")
     private val contactsCache = Collections.synchronizedMap(
-        object : LinkedHashMap<String, String>(MAX_CACHE_SIZE, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
+        object : LinkedHashMap<String, ContactInfo>(MAX_CACHE_SIZE, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ContactInfo>?): Boolean {
                 return size > MAX_CACHE_SIZE
             }
         }
@@ -52,7 +57,7 @@ object ContactsHelper {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun queryPhoneLookup(number: String, context: Context): String? {
+    private fun queryPhoneLookup(number: String, context: Context): ContactInfo? {
         try {
             val uri = Uri.withAppendedPath(
                 ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
@@ -60,16 +65,19 @@ object ContactsHelper {
             )
             val projection = arrayOf(
                 ContactsContract.PhoneLookup._ID,
-                ContactsContract.PhoneLookup.DISPLAY_NAME
+                ContactsContract.PhoneLookup.DISPLAY_NAME,
+                ContactsContract.PhoneLookup.PHOTO_THUMBNAIL_URI
             )
             val cursor: Cursor? = context.contentResolver.query(uri, projection, null, null, null)
             cursor?.use {
                 if (it.moveToFirst()) {
                     val nameIdx = it.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME)
+                    val photoIdx = it.getColumnIndex(ContactsContract.PhoneLookup.PHOTO_THUMBNAIL_URI)
                     if (nameIdx != -1) {
                         val name = it.getString(nameIdx)?.trim()
+                        val photoUri = if (photoIdx != -1) it.getString(photoIdx)?.trim() else null
                         if (!name.isNullOrEmpty()) {
-                            return name
+                            return ContactInfo(name, photoUri)
                         }
                     }
                 }
@@ -80,14 +88,10 @@ object ContactsHelper {
         return null
     }
 
-    /**
-     * Resolves a telephone number or clean SIP username against Android's ContactsContract.
-     * Returns the contact display name if matched, or null otherwise.
-     */
-    fun findContactNameByNumber(
+    fun findContactByNumber(
         phoneNumber: String?,
         context: Context = LinhomeApplication.instance
-    ): String? {
+    ): ContactInfo? {
         if (phoneNumber.isNullOrBlank()) return null
         val cleanNumber = phoneNumber.trim()
 
@@ -95,29 +99,39 @@ object ContactsHelper {
             return null
         }
 
-        // Check in-memory cache first
         contactsCache[cleanNumber]?.let { cached ->
-            return if (cached.isEmpty()) null else cached
+            return if (cached.name.isEmpty()) null else cached
         }
 
-        var resolvedName = queryPhoneLookup(cleanNumber, context)
+        var resolved = queryPhoneLookup(cleanNumber, context)
 
-        // If not found and number starts with "00", try replacing with "+"
-        if (resolvedName == null && cleanNumber.startsWith("00") && cleanNumber.length > 4) {
-            resolvedName = queryPhoneLookup("+" + cleanNumber.substring(2), context)
+        if (resolved == null && cleanNumber.startsWith("00") && cleanNumber.length > 4) {
+            resolved = queryPhoneLookup("+" + cleanNumber.substring(2), context)
         }
-        // If not found and number starts with "+", try replacing with "00"
-        if (resolvedName == null && cleanNumber.startsWith("+") && cleanNumber.length > 4) {
-            resolvedName = queryPhoneLookup("00" + cleanNumber.substring(1), context)
+        if (resolved == null && cleanNumber.startsWith("+") && cleanNumber.length > 4) {
+            resolved = queryPhoneLookup("00" + cleanNumber.substring(1), context)
         }
 
-        // Cache the lookup result (empty string if not found to avoid redundant queries)
-        contactsCache[cleanNumber] = resolvedName ?: ""
-        if (resolvedName != null) {
-            Log.i("$TAG Resolved $cleanNumber to contact: $resolvedName")
+        contactsCache[cleanNumber] = resolved ?: ContactInfo("")
+        if (resolved != null) {
+            Log.i("$TAG Resolved $cleanNumber to contact: ${resolved.name}")
         }
 
-        return resolvedName
+        return resolved
+    }
+
+    fun findContactNameByNumber(
+        phoneNumber: String?,
+        context: Context = LinhomeApplication.instance
+    ): String? {
+        return findContactByNumber(phoneNumber, context)?.name
+    }
+
+    fun findContactPhotoUriByNumber(
+        phoneNumber: String?,
+        context: Context = LinhomeApplication.instance
+    ): String? {
+        return findContactByNumber(phoneNumber, context)?.photoUri
     }
 
     fun clearCache() {

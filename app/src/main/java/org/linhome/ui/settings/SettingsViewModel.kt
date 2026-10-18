@@ -63,16 +63,33 @@ class SettingsViewModel : ViewModelWithTools() {
 
     // History retention selector
     private val retentionValues = arrayListOf(0, 1, 2, 3, 7, 30, 90)
-    val retentionIndex = MutableLiveData<Int>()
     val retentionLabels = MutableLiveData<ArrayList<String>>()
-    val retentionListener = object : SettingListenerStub() {
+
+    // Intercom retention
+    val intercomRetentionIndex = MutableLiveData<Int>()
+    val intercomRetentionListener = object : SettingListenerStub() {
         override fun onListValueChanged(position: Int) {
             val days = retentionValues[position]
-            corePref.historyRetentionDays = days
-            retentionIndex.value = position
-            HistoryEventStore.pruneOldEvents(days)
+            corePref.intercomRetentionDays = days
+            intercomRetentionIndex.value = position
+            HistoryEventStore.pruneOldEvents()
         }
     }
+
+    // Voice call retention
+    val voiceRetentionIndex = MutableLiveData<Int>()
+    val voiceRetentionListener = object : SettingListenerStub() {
+        override fun onListValueChanged(position: Int) {
+            val days = retentionValues[position]
+            corePref.voiceCallRetentionDays = days
+            voiceRetentionIndex.value = position
+            HistoryEventStore.pruneOldEvents()
+        }
+    }
+
+    // Backward-compatibility alias
+    val retentionIndex: MutableLiveData<Int> get() = intercomRetentionIndex
+    val retentionListener: SettingListenerStub get() = intercomRetentionListener
 
     // Auto-close preview timer selector
     val autoCloseTimerEnabled = MutableLiveData(corePref.silentAcceptTimerEnabled)
@@ -200,8 +217,11 @@ class SettingsViewModel : ViewModelWithTools() {
             Texts.get("retention_30_days"),
             Texts.get("retention_90_days")
         )
-        val idx = retentionValues.indexOf(corePref.historyRetentionDays)
-        retentionIndex.value = if (idx >= 0) idx else retentionValues.indexOf(2)
+        val intercomIdx = retentionValues.indexOf(corePref.intercomRetentionDays)
+        intercomRetentionIndex.value = if (intercomIdx >= 0) intercomIdx else retentionValues.indexOf(2)
+
+        val voiceIdx = retentionValues.indexOf(corePref.voiceCallRetentionDays)
+        voiceRetentionIndex.value = if (voiceIdx >= 0) voiceIdx else retentionValues.indexOf(30)
     }
 
     private fun initEncryptionList() {

@@ -158,13 +158,37 @@ object HistoryEventStore {
         }
     }
 
-    fun pruneOldEvents(maxAgeDays: Int) {
-        if (maxAgeDays <= 0 || !LinhomeApplication.contextExists()) return
+    fun isIntercomCall(log: org.linphone.core.CallLog): Boolean {
+        val device = DeviceStore.findDeviceByAddress(log.remoteAddress)
+        if (device != null) {
+            return device.type != "phone_call"
+        }
+        val event = historyEvents[log.callId]
+        if (event != null && event.hasVideo) {
+            return true
+        }
+        return false
+    }
+
+    fun pruneOldEvents(
+        intercomMaxAgeDays: Int = LinhomeApplication.corePreferences.intercomRetentionDays,
+        voiceCallMaxAgeDays: Int = LinhomeApplication.corePreferences.voiceCallRetentionDays
+    ) {
+        if (!LinhomeApplication.contextExists()) return
         val core = LinhomeApplication.coreContext.core
-        val cutoffSeconds = (System.currentTimeMillis() / 1000L) - (maxAgeDays.toLong() * 86400L)
+        val nowSeconds = System.currentTimeMillis() / 1000L
+        val intercomCutoffSeconds = if (intercomMaxAgeDays > 0) nowSeconds - (intercomMaxAgeDays.toLong() * 86400L) else null
+        val voiceCallCutoffSeconds = if (voiceCallMaxAgeDays > 0) nowSeconds - (voiceCallMaxAgeDays.toLong() * 86400L) else null
+
+        if (intercomCutoffSeconds == null && voiceCallCutoffSeconds == null) {
+            return
+        }
+
         val expiredCallIds = ArrayList<String>()
         core.callLogs.forEach { log ->
-            if (log.startDate < cutoffSeconds) {
+            val isIntercom = isIntercomCall(log)
+            val cutoff = if (isIntercom) intercomCutoffSeconds else voiceCallCutoffSeconds
+            if (cutoff != null && log.startDate < cutoff) {
                 log.callId?.let { expiredCallIds.add(it) }
                 core.removeCallLog(log)
             }

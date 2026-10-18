@@ -70,6 +70,31 @@
                         android:visibility='@{model.historyEvent.hasMediaThumbnail() ? View.VISIBLE : View.GONE, default="gone"}'
                         android:scaleType="centerCrop"/>
 
+                    <RelativeLayout
+                        android:id="@+id/voicecall_avatar"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        backgoundcolor='@{"color_u"}'
+                        android:gravity="center"
+                        android:visibility='@{model.isVoiceCall() &amp;&amp; !model.historyEvent.hasMediaThumbnail() ? View.VISIBLE : View.GONE, default="gone"}'>
+
+                        <ImageView
+                            android:id="@+id/voicecall_photo"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            glidewithUri='@{model.contactPhotoUri()}'
+                            android:scaleType="centerCrop"
+                            android:visibility='@{model.contactPhotoUri() != null ? View.VISIBLE : View.GONE, default="gone"}' />
+
+                        <ImageView
+                            android:id="@+id/voicecall_icon"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_centerInParent="true"
+                            icon='@{"icons/icon_phone_call_circle"}'
+                            android:visibility='@{model.contactPhotoUri() == null ? View.VISIBLE : View.GONE, default="visible"}' />
+                    </RelativeLayout>
+
                     <TextView
                         android:id="@+id/nomedia"
                         android:layout_width="match_parent"
@@ -78,7 +103,7 @@
                         text='@{"history_no_media_found"}'
                         backgoundcolor='@{"color_u"}'
                         android:layout_centerInParent="true"
-                        android:visibility='@{model.historyEvent.hasMedia() || model.historyEvent.hasMediaThumbnail() ? View.GONE : View.VISIBLE, default="visible"}'
+                        android:visibility='@{!model.isVoiceCall() &amp;&amp; !model.historyEvent.hasMedia() &amp;&amp; !model.historyEvent.hasMediaThumbnail() ? View.VISIBLE : View.GONE, default="visible"}'
                         android:text="No media" />
 
                     <com.google.android.material.floatingactionbutton.FloatingActionButton

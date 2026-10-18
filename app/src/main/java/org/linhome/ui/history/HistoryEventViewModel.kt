@@ -157,4 +157,19 @@ class HistoryEventViewModel(
         return callLog.isNew()
     }
 
+    fun isVoiceCall(): Boolean {
+        if (historyEvent?.hasVideo == true) {
+            return false
+        }
+        if (device != null) {
+            return device.type == "phone_call"
+        }
+        return true
+    }
+
+    fun contactPhotoUri(): String? {
+        val cleanNumber = getSipNumber()
+        return ContactsHelper.findContactPhotoUriByNumber(cleanNumber)
+    }
+
 }

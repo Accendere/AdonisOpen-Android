@@ -45,9 +45,16 @@
 
         <include
             layout="@layout/settings_widget_spinner"
-            title='@{model.getText("settings_history_retention")}'
-            listener="@{model.retentionListener}"
-            selectedIndex="@{model.retentionIndex}"
+            title='@{model.getText("settings_history_retention_intercom")}'
+            listener="@{model.intercomRetentionListener}"
+            selectedIndex="@{model.intercomRetentionIndex}"
+            labels="@{model.retentionLabels}"/>
+
+        <include
+            layout="@layout/settings_widget_spinner"
+            title='@{model.getText("settings_history_retention_voice")}'
+            listener="@{model.voiceRetentionListener}"
+            selectedIndex="@{model.voiceRetentionIndex}"
             labels="@{model.retentionLabels}"/>
 
         <include

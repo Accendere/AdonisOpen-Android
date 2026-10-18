@@ -339,6 +339,15 @@ fun glidewith(image: ImageView, file: File?, cornerradius: String?) {
     }
 }
 
+@BindingAdapter("glidewithUri")
+fun glidewithUri(image: ImageView, uriString: String?) {
+    if (!uriString.isNullOrEmpty()) {
+        Theme.glidegeneric.load(android.net.Uri.parse(uriString)).into(image)
+    } else {
+        image.setImageDrawable(null)
+    }
+}
+
 @BindingAdapter("tint")
 fun tint(button: ImageView, name: String) {
     button.imageTintList = Theme.buildSingleColorStateList(name)

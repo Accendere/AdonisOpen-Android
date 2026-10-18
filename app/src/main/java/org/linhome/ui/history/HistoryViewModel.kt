@@ -44,7 +44,7 @@ class HistoryViewModel : ViewModel() {
     }
 
     init {
-        HistoryEventStore.pruneOldEvents(LinhomeApplication.corePreferences.historyRetentionDays)
+        HistoryEventStore.pruneOldEvents()
         LinhomeApplication.coreContext.core.addListener(coreListener)
         history = MutableLiveData(LinhomeApplication.coreContext.core.callLogsWithNonEmptyCallId())
     }

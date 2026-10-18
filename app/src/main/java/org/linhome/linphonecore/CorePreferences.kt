@@ -78,9 +78,23 @@ class CorePreferences constructor(private val context: Context) {
         }
 
     var historyRetentionDays: Int
-        get() = config.getInt("app", "history_retention_days", 2)
+        get() = intercomRetentionDays
         set(value) {
+            intercomRetentionDays = value
+        }
+
+    var intercomRetentionDays: Int
+        get() = config.getInt("app", "history_retention_days_intercom", config.getInt("app", "history_retention_days", 2))
+        set(value) {
+            config.setInt("app", "history_retention_days_intercom", value)
             config.setInt("app", "history_retention_days", value)
+            config.sync()
+        }
+
+    var voiceCallRetentionDays: Int
+        get() = config.getInt("app", "history_retention_days_voice_calls", 30)
+        set(value) {
+            config.setInt("app", "history_retention_days_voice_calls", value)
             config.sync()
         }
 
