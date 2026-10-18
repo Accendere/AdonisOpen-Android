@@ -32,6 +32,8 @@ class ValidatorFactory {
             NonEmptyWithRegExpFormatValidator("^(sip|sips):(.+)@(.+)\$", "invalid_sip_uri")
         val optionalSipUri =
             EmptyWithRegExpFormatValidator("^(?:sips?:)?([^@]+)\$", "invalid_sip_uri")
+        val optionalSipAddress =
+            EmptyWithRegExpFormatValidator("^(sip|sips):(.+)@(.+)\$", "invalid_sip_uri")
         val actionCode = RegExpFormatValidator("^[0-9#*]+$", "invalid_action_code")
     }
 }

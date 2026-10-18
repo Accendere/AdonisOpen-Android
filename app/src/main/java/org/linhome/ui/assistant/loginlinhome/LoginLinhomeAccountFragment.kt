@@ -59,6 +59,16 @@ class LoginLinhomeAccountFragment : CreatorAssistantFragment() {
         binding.model = model
         binding.validators = ValidatorFactory.Companion
 
+        model.accountCreatorResult.observe(viewLifecycleOwner) { response ->
+            if (response != AccountCreator.Status.AccountNotExist) {
+                model.linhomeAccountCreateProxyConfig(model.accountCreator, true, model.sipRegistrationResult)
+            } else {
+                hideProgress()
+                binding.login.isEnabled = true
+                binding.username.setError(Texts.get("linhome_account_login_failed_unknown_user_or_wroong_password"))
+            }
+        }
+
         binding.login.setOnClickListener {
             binding.username.validate()
             binding.password.validate()
@@ -68,20 +78,12 @@ class LoginLinhomeAccountFragment : CreatorAssistantFragment() {
                 hideKeyboard()
                 binding.login.isEnabled = false
                 showProgress()
-                model.accountCreatorResult.observe(viewLifecycleOwner) { response ->
-                    hideProgress()
-                    if (response == AccountCreator.Status.AccountExist) {
-                        model.linhomeAccountCreateProxyConfig(model.accountCreator,true, model.sipRegistrationResult)
-                    } else {
-                        binding.login.isEnabled = true
-                        binding.username.setError(Texts.get("linhome_account_login_failed_unknown_user_or_wroong_password"))
-                    }
-                }
                 model.fireLogin()
             }
         }
 
         model.sipRegistrationResult.observe(viewLifecycleOwner) { sipOk ->
+            hideProgress()
             if (sipOk) {
                 mainactivity.navController.popBackStack(R.id.navigation_devices, false)
                 DialogUtil.info("linhome_account_loggedin")
@@ -90,7 +92,6 @@ class LoginLinhomeAccountFragment : CreatorAssistantFragment() {
                     coreContext.core.start()
                 }
             } else {
-                hideProgress()
                 binding.login.isEnabled = true
                 binding.username.setError(Texts.get("linhome_account_login_failed_unknown_user_or_wroong_password"))
             }

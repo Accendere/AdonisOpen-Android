@@ -51,6 +51,11 @@
             app:argType="org.linhome.entities.Device"
             app:nullable="true"
             android:defaultValue="@null" />
+        <argument
+            android:name="address"
+            app:argType="string"
+            app:nullable="true"
+            android:defaultValue="@null" />
         <action
             android:id="@+id/device_deleted"
             app:destination="@id/navigation_devices"

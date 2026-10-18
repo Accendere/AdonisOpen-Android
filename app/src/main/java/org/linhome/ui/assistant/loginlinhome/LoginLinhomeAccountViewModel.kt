@@ -65,9 +65,10 @@ class LoginLinhomeAccountViewModel :
 
 
     fun fireLogin() {
-        if (accountCreator.isAccountExist() == AccountCreator.Status.RequestOk) {
-                accountCreator.addListener(creatorListener)
-        } else {
+        accountCreator.removeListener(creatorListener)
+        accountCreator.addListener(creatorListener)
+        if (accountCreator.isAccountExist() != AccountCreator.Status.RequestOk) {
+            accountCreator.removeListener(creatorListener)
             accountCreatorResult.value = AccountCreator.Status.UnexpectedError
         }
     }

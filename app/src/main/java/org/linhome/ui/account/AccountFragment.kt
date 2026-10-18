@@ -31,6 +31,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import org.linhome.LinhomeApplication
+import org.linhome.R
 import org.linhome.databinding.FragmentAccountBinding
 import org.linhome.entities.LinhomeAccount
 import org.linhome.utils.DialogUtil
@@ -47,6 +48,14 @@ class AccountFragment : Fragment() {
         val model = ViewModelProvider(this).get(AccountViewModel::class.java)
         binding.model = model
         binding.lifecycleOwner  = this
+
+        binding.setupSip.setOnClickListener {
+            findNavController().navigate(R.id.navigation_assistant_login_sip)
+        }
+
+        binding.setupRemote.setOnClickListener {
+            findNavController().navigate(R.id.navigation_assistant_remote_root)
+        }
 
         binding.refreshRegisters.setOnClickListener {
             model.refreshRegisters()

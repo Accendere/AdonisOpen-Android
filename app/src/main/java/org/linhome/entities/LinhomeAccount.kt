@@ -28,6 +28,7 @@ import org.linhome.linphonecore.extensions.cleanHistory
 import org.linhome.store.DeviceStore
 import org.linphone.core.Account
 import org.linphone.core.CoreListenerStub
+import org.linphone.core.tools.Log
 
 object LinhomeAccount {
 
@@ -103,6 +104,35 @@ object LinhomeAccount {
             it.expires = corePreferences.config.getInt( "proxy_default_values","reg_expires", 31536000)
             pushAccount.params = it
             pushAccount.refreshRegister()
+        }
+    }
+
+    fun setAppEnabled(enabled: Boolean) {
+        corePreferences.appEnabled = enabled
+        val defaultExpires = corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
+        coreContext.core.accountList.forEach { account ->
+            account.params.clone().also { newParams ->
+                newParams.isRegisterEnabled = enabled
+                newParams.expires = if (enabled) defaultExpires else 0
+                account.params = newParams
+            }
+            account.refreshRegister()
+        }
+        if (!enabled) {
+            coreContext.notificationsManager.stopForegroundNotification()
+        } else if (corePreferences.keepServiceAlive) {
+            coreContext.notificationsManager.startForeground()
+        }
+        try {
+            org.linhome.widgets.ReceiveCallsWidgetProvider.updateAllWidgets(LinhomeApplication.instance)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+                android.service.quicksettings.TileService.requestListeningState(
+                    LinhomeApplication.instance,
+                    android.content.ComponentName(LinhomeApplication.instance, org.linhome.quicksettings.ReceiveCallsTileService::class.java)
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("[LinhomeAccount] Error notifying widget/tile: ${e.message}")
         }
     }
 

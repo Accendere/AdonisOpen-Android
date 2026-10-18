@@ -40,12 +40,6 @@ class AssistantRootFragment : GenericFragment() {
     ): View? {
         val binding = FragmentAssistantRootBinding.inflate(inflater, container, false)
 
-        binding.create.setOnClickListener {
-            navigateToCompotent(R.id.navigation_assistant_create_linhome)
-        }
-        binding.use.setOnClickListener {
-            navigateToCompotent(R.id.navigation_assistant_login_linhome)
-        }
         binding.sip.setOnClickListener {
             navigateToCompotent(R.id.navigation_assistant_login_sip)
         }

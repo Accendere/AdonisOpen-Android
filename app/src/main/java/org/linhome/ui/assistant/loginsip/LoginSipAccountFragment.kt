@@ -56,7 +56,7 @@ class LoginSipAccountFragment : CreatorAssistantFragment() {
         }
 
         binding.loginsip.setOnClickListener {
-            model.accountCreator = coreContext.core.createAccountCreator(null)
+            model.accountCreator.reset()
             binding.username.validate()
             binding.password.validate()
             binding.domain.validate()

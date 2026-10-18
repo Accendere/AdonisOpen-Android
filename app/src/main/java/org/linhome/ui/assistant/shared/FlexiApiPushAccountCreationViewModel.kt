@@ -73,6 +73,7 @@ open class  FlexiApiPushAccountCreationViewModel(defaultValuePath: String) : Cre
     }
 
     override fun onCleared() {
+        super.onCleared()
         accountCreator.removeListener(creatorListener)
     }
 

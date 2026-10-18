@@ -47,7 +47,7 @@ class LoginSipAccountViewModel :
     var username: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
         Pair(MutableLiveData(), MutableLiveData<Boolean>(false))
     var domain: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
-        Pair(MutableLiveData(), MutableLiveData<Boolean>(false))
+        Pair(MutableLiveData(corePreferences.loginDomain ?: "sip.linhome.org"), MutableLiveData<Boolean>(true))
     var pass1: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
         Pair(MutableLiveData(), MutableLiveData<Boolean>(false))
     var transport: MutableLiveData<Int> = MutableLiveData<Int>(TransportType.Tls.toInt())
@@ -92,6 +92,7 @@ class LoginSipAccountViewModel :
             account.params.clone().also { newParams ->
                 newParams.expires = expiration.toInt()
                 newParams.transport = accountCreator.transport
+                newParams.pushNotificationAllowed = true
                 if (!TextUtils.isEmpty(proxy)) {
                     val cleanProxy = if (proxy?.startsWith("sip") == true) proxy.replace("sip:","")
                         .replace("sips:","") else proxy

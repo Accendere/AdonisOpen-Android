@@ -56,6 +56,17 @@ class RemoteAnyAccountViewModel : FlexiApiPushAccountCreationViewModel(corePrefe
             GlobalScope.launch(context = Dispatchers.Main) {
                 coreContext.core.isQrcodeVideoPreviewEnabled = false
                 coreContext.core.isVideoPreviewEnabled = false
+                if (qr != null && org.linhome.utils.AdonisProvisioner.isAdonisConfig(qr)) {
+                    val handled = org.linhome.utils.AdonisProvisioner.provisionFromRaw(qr, coreContext.context) { success, _ ->
+                        if (success) {
+                            configurationResult.postValue(ConfiguringState.Successful)
+                            pushReady.postValue(true)
+                        } else {
+                            configurationResult.postValue(ConfiguringState.Failed)
+                        }
+                    }
+                    if (handled) return@launch
+                }
                 url.first.value = qr
                 startRemoteProvisionning()
             }

@@ -56,8 +56,16 @@
             android:screenOrientation="sensor"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/LinhomeTheme"
-            android:exported="false">
+            android:launchMode="singleTask"
+            android:taskAffinity="org.probonis"
+            android:exported="true">
             <nav-graph android:value="@navigation/fragments_graph" />
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="adonis" />
+            </intent-filter>
         </activity>
         <activity
             android:name="org.linhome.SplashActivity"

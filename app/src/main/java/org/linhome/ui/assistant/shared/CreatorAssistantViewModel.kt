@@ -154,7 +154,13 @@ abstract class CreatorAssistantViewModel(defaultValuePath: String) : ViewModel()
         account?.findAuthInfo()?.also { authInfo ->
             authInfo.clone().also { clonedAuthInfo ->
                 coreContext.core.removeAuthInfo(authInfo)
-                clonedAuthInfo.algorithm = corePreferences.passwordAlgo
+                if (!accountCreator.password.isNullOrEmpty()) {
+                    clonedAuthInfo.password = accountCreator.password
+                    clonedAuthInfo.ha1 = null
+                    clonedAuthInfo.algorithm = null
+                } else {
+                    clonedAuthInfo.algorithm = corePreferences.passwordAlgo
+                }
                 coreContext.core.addAuthInfo(clonedAuthInfo)
             }
         }
@@ -176,6 +182,7 @@ abstract class CreatorAssistantViewModel(defaultValuePath: String) : ViewModel()
                     }
                     if (state == RegistrationState.Failed) {
                         core.removeListener(sipRegistrationCoreListener)
+                        org.linhome.entities.LinhomeAccount.disconnect()
                         registrationOk?.value = false
                     }
                 }
