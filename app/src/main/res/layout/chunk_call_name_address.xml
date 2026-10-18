@@ -16,7 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         style='@{"view_call_device_name"}'
-        android:text='@{callmodel.device != null ? callmodel.device.name : callmodel.call.remoteAddress.username}'
+        android:text='@{callmodel.callerName}'
         />
 
     <TextView
@@ -25,7 +25,8 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
         style='@{"view_call_device_address"}'
-        android:text='@{callmodel.call.remoteAddress.asStringUriOnly()}'
+        android:text='@{callmodel.callerAddress}'
+        android:visibility='@{callmodel.callerAddress != null &amp;&amp; !callmodel.callerAddress.empty ? View.VISIBLE : View.GONE}'
         />
     </LinearLayout>
 </layout>

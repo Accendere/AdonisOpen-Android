@@ -82,6 +82,12 @@ class CallViewModel(val call: Call) : ViewModel() {
 
     val videoSize = MutableLiveData<Size>()
 
+    val isVoiceCall: MutableLiveData<Boolean> = MutableLiveData(false)
+    val callerName: MutableLiveData<String> = MutableLiveData("")
+    val callerAddress: MutableLiveData<String> = MutableLiveData("")
+    val callDisplayDeviceType: MutableLiveData<String> = MutableLiveData(DeviceTypes.defaultType)
+    val callSubtitleTextKey: MutableLiveData<String> = MutableLiveData("incoming_someone_at_your_door")
+
     private var historyEvent: HistoryEvent
     private var pendingActionAfterSilentAccept: Action? = null
 
@@ -91,6 +97,7 @@ class CallViewModel(val call: Call) : ViewModel() {
                 if (call != null) {
                     historyEvent = call.callLog.historyEvent()
                 }
+                updateVoiceCallAndCallerInfo()
                 fireActionsOnCallStateChanged(state)
                 attemptSetDeviceThumbnail(state)
                 call?.remoteParams?.isVideoEnabled?.also {
@@ -109,6 +116,7 @@ class CallViewModel(val call: Call) : ViewModel() {
             }
             if (!videoContent.value!!) {
                 videoContent.value = true
+                updateVoiceCallAndCallerInfo()
             }
             call?.callLog?.historyEvent()?.also { event ->
                 if (!event.hasVideo) {
@@ -132,6 +140,7 @@ class CallViewModel(val call: Call) : ViewModel() {
     init {
         historyEvent = call.callLog.historyEvent()
         videoContent.value = historyEvent.hasVideo
+        updateVoiceCallAndCallerInfo()
         call.addListener(callListener)
         fireActionsOnCallStateChanged(call.state)
         if (!videoContent.value!!) {
@@ -142,9 +151,50 @@ class CallViewModel(val call: Call) : ViewModel() {
         }
         if (LinhomeApplication.instance.tablet()) {
             coreContext.core.forceSpeakerAudioRoute()
+        } else if (isVoiceCall.value == true) {
+            speakerDisabled.value = true
         }
         coreContext.core.config.getString("detected_video_dimensions",call.remoteAddress.asStringUriOnly(),null)?.split(",")?.also {
             videoSize.value = Size(it.first().toInt(),it.last().toInt())
+        }
+    }
+
+    fun updateVoiceCallAndCallerInfo() {
+        val d = device.value
+        val isAudioDevice = d?.type?.let { !DeviceTypes.supportsVideo(it) } ?: false
+        val hasVideoOffer = (call.remoteParams?.isVideoEnabled == true) ||
+                (call.currentParams?.isVideoEnabled == true) ||
+                (call.params?.isVideoEnabled == true) ||
+                (videoContent.value == true)
+        val voice = isAudioDevice || (d == null && !hasVideoOffer)
+        isVoiceCall.value = voice
+
+        // Display device type for icon
+        val displayType = when {
+            d?.type != null -> d.type
+            voice -> "phone_call"
+            else -> defaultDeviceType.value ?: "device_audio_intercom"
+        }
+        callDisplayDeviceType.value = displayType
+
+        // Subtitle text key under icon
+        callSubtitleTextKey.value = if (voice) "incoming_voice_call" else "incoming_someone_at_your_door"
+
+        // Caller name and clean number
+        val cleanNum = call.remoteAddress.getCleanNumber()
+        val displayName = call.remoteAddress.displayName?.trim()
+
+        if (d != null) {
+            callerName.value = d.name
+            callerAddress.value = if (!d.address.isNullOrBlank()) d.address else cleanNum
+        } else {
+            if (!displayName.isNullOrEmpty() && !displayName.equals(cleanNum, ignoreCase = true)) {
+                callerName.value = displayName
+                callerAddress.value = if (cleanNum.isNotEmpty()) cleanNum else (if (voice) (Texts.get("call_type_voice_call") ?: "Voice Call") else call.remoteAddress.asStringUriOnly())
+            } else {
+                callerName.value = if (cleanNum.isNotEmpty()) cleanNum else (call.remoteAddress.username ?: "")
+                callerAddress.value = if (voice) (Texts.get("call_type_voice_call") ?: "Voice Call") else call.remoteAddress.asStringUriOnly()
+            }
         }
     }
 
@@ -173,8 +223,31 @@ class CallViewModel(val call: Call) : ViewModel() {
                     if (corePreferences.saveCallVideos && !call.isRecording) {
                         call.startRecording()
                     }
-                    coreContext.core.forceSpeakerAudioRoute()
-                    speakerDisabled.value = false
+                    if (isVoiceCall.value != true || LinhomeApplication.instance.tablet()) {
+                        coreContext.core.forceSpeakerAudioRoute()
+                        speakerDisabled.value = false
+                    } else {
+                        val currentType = coreContext.core.outputAudioDevice?.type
+                        if (currentType != AudioDevice.Type.Bluetooth &&
+                            currentType != AudioDevice.Type.Headphones &&
+                            currentType != AudioDevice.Type.Headset) {
+                            coreContext.core.forceEarpieceAudioRoute()
+                            speakerDisabled.value = true
+                        }
+                    }
+                } else if (cstate == Call.State.StreamsRunning && call.callLog?.dir == Call.Dir.Incoming) {
+                    if (isVoiceCall.value == true && !LinhomeApplication.instance.tablet()) {
+                        val currentType = coreContext.core.outputAudioDevice?.type
+                        if (currentType != AudioDevice.Type.Bluetooth &&
+                            currentType != AudioDevice.Type.Headphones &&
+                            currentType != AudioDevice.Type.Headset) {
+                            coreContext.core.forceEarpieceAudioRoute()
+                            speakerDisabled.value = true
+                        }
+                    } else if (LinhomeApplication.instance.tablet()) {
+                        coreContext.core.forceSpeakerAudioRoute()
+                        speakerDisabled.value = false
+                    }
                 }
             }
         }
@@ -332,6 +405,15 @@ class CallViewModel(val call: Call) : ViewModel() {
     fun extendedAccept() {
         call.extendedAccept()
         callState.value = call.state
+        if (isVoiceCall.value == true && !LinhomeApplication.instance.tablet()) {
+            val currentType = coreContext.core.outputAudioDevice?.type
+            if (currentType != AudioDevice.Type.Bluetooth &&
+                currentType != AudioDevice.Type.Headphones &&
+                currentType != AudioDevice.Type.Headset) {
+                coreContext.core.forceEarpieceAudioRoute()
+                speakerDisabled.value = true
+            }
+        }
     }
 
 

@@ -24,6 +24,7 @@ import androidx.lifecycle.MutableLiveData
 import org.linhome.customisation.Texts
 import org.linhome.entities.Device
 import org.linhome.entities.HistoryEvent
+import org.linhome.linphonecore.extensions.getCleanNumber
 import org.linhome.linphonecore.extensions.isNew
 import org.linhome.store.DeviceStore
 import org.linhome.store.HistoryEventStore
@@ -124,18 +125,15 @@ class HistoryEventViewModel(
     }
 
     fun getSipNumber(): String {
-        val uri = callLog.remoteAddress.asStringUriOnly()
-        val afterScheme = when {
-            uri.startsWith("sips:", ignoreCase = true) -> uri.substring(5)
-            uri.startsWith("sip:", ignoreCase = true) -> uri.substring(4)
-            else -> uri.substringAfter("sip:")
+        return callLog.remoteAddress.getCleanNumber()
+    }
+
+    fun displayAddress(): String {
+        if (device == null) {
+            val number = getSipNumber()
+            if (number.isNotEmpty()) return number
         }
-        return if (afterScheme.contains("@")) {
-            afterScheme.substringBefore("@")
-        } else {
-            val username = callLog.remoteAddress.username
-            if (!username.isNullOrEmpty()) username else afterScheme
-        }
+        return callLog.remoteAddress.asStringUriOnly()
     }
 
     fun isNew(): Boolean {

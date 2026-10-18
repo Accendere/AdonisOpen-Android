@@ -52,8 +52,10 @@ import org.linhome.compatibility.Compatibility
 import org.linhome.customisation.DeviceTypes
 import org.linhome.customisation.Texts
 import org.linhome.customisation.Theme
+import org.linhome.entities.Device
 import org.linhome.linphonecore.CoreService
 import org.linhome.linphonecore.extensions.extendedAcceptEarlyMedia
+import org.linhome.linphonecore.extensions.getCleanNumber
 import org.linhome.linphonecore.extensions.historyEvent
 import org.linhome.linphonecore.extensions.missedCount
 import org.linhome.store.DeviceStore
@@ -161,8 +163,10 @@ class NotificationsManager(private val context: Context) {
                             val bitmap = BitmapFactory.decodeFile(it.absolutePath)
                             val notifiable = getNotifiableForCall(call)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && bitmap != null) {
+                                val cleanNumber = call.remoteAddress.getCleanNumber()
                                 val displayName =
-                                    DeviceStore.findDeviceByAddress(call.remoteAddress)?.name ?: call.remoteAddress.username
+                                    DeviceStore.findDeviceByAddress(call.remoteAddress)?.name
+                                        ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
                                 val hasVideo = call.remoteParams?.isVideoEnabled ?: true
                                 val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java).apply {
                                     putExtra("callId", call.callLog.callId)
@@ -508,7 +512,8 @@ class NotificationsManager(private val context: Context) {
 
     private fun fillIncomingRemoteViewsForCall(call: Call, hasSnapShot: Boolean): RemoteViews {
         val device =  DeviceStore.findDeviceByAddress(call.remoteAddress)
-        val displayName = device?.name ?: call.remoteAddress.username
+        val cleanNumber = call.remoteAddress.getCleanNumber()
+        val displayName = device?.name ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
         val remoteView =
             if (hasSnapShot)
                 RemoteViews(
@@ -520,14 +525,12 @@ class NotificationsManager(private val context: Context) {
 
         remoteView.setTextViewText(R.id.caller, displayName)
 
-
-        val hasVideo = call.remoteParams?.let {
-            it.isVideoEnabled
-        } ?: false
+        val isAudioDevice = device?.type?.let { !DeviceTypes.supportsVideo(it) } ?: false
+        val hasVideo = (call.remoteParams?.isVideoEnabled == true) && !isAudioDevice
 
         remoteView.setTextViewText(
             R.id.incoming_call_info,
-            Texts.get(if (hasVideo) "notif_incoming_call_video" else "notif_incoming_call_audio")
+            Texts.get(if (hasVideo) "notif_incoming_call_video" else if (device == null) "incoming_voice_call" else "notif_incoming_call_audio")
         )
 
         val awt = AppWidgetTarget(
@@ -537,11 +540,8 @@ class NotificationsManager(private val context: Context) {
             if (hasSnapShot) 1 else 2
         )
 
-        Glide.with(context.applicationContext).asBitmap().load(device?.let { device ->
-            device.typeIconAsBitmap?.let {
-                it
-            }
-        } ?: DeviceTypes.defaultTypeIconAsBitmap).into(awt)
+        val iconBitmap = device?.typeIconAsBitmap ?: if (!hasVideo) Device.typeIconAsBitmap("phone_call") else DeviceTypes.defaultTypeIconAsBitmap
+        Glide.with(context.applicationContext).asBitmap().load(iconBitmap).into(awt)
 
 
         return remoteView
@@ -555,8 +555,9 @@ class NotificationsManager(private val context: Context) {
         }
 
         val notifiable = getNotifiableForCall(call)
-        val displayName =
-            DeviceStore.findDeviceByAddress(call.remoteAddress)?.name ?: call.remoteAddress.username
+        val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
+        val cleanNumber = call.remoteAddress.getCleanNumber()
+        val displayName = device?.name ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
 
         val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java)
         incomingCallNotificationIntent.putExtra("callId", call.callLog.callId)
@@ -569,10 +570,8 @@ class NotificationsManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-
-        val hasVideo = call.remoteParams?.let {
-            it.isVideoEnabled
-        } ?: false
+        val isAudioDevice = device?.type?.let { !DeviceTypes.supportsVideo(it) } ?: false
+        val hasVideo = (call.remoteParams?.isVideoEnabled == true) && !isAudioDevice
 
         val declineAction = getCallDeclineAction(notifiable.notificationId)
 
@@ -586,6 +585,8 @@ class NotificationsManager(private val context: Context) {
                         PendingIntent.FLAG_IMMUTABLE
             )
         }
+
+        val hasDoorAction = (device?.actions?.isNotEmpty() == true) || LinhomeApplication.corePreferences.defaultAction1 != null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Use CallStyle on API 31+ for proper system handling on lock screen
@@ -614,14 +615,16 @@ class NotificationsManager(private val context: Context) {
                     .setOngoing(true)
                     .setColor(Color.WHITE)
                     .setFullScreenIntent(pendingIntent, true)
-                    .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+            if (hasDoorAction) {
+                notificationBuilder.addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+            }
         } else {
             notificationBuilder =
                 NotificationCompat.Builder(context, Texts.get("notification_channel_incoming_call_id"))
                     .setStyle(NotificationCompat.DecoratedCustomViewStyle())
                     .setSmallIcon(R.drawable.notification_phone)
                     .setContentTitle(displayName)
-                    .setContentText(Texts.get(if (hasVideo) "notif_incoming_call_video" else "notif_incoming_call_audio"))
+                    .setContentText(Texts.get(if (hasVideo) "notif_incoming_call_video" else if (device == null) "incoming_voice_call" else "notif_incoming_call_audio"))
                     .setContentIntent(pendingIntent)
                     .setCategory(NotificationCompat.CATEGORY_CALL)
                     .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -633,9 +636,12 @@ class NotificationsManager(private val context: Context) {
                     .setColor(ContextCompat.getColor(context, R.color.color_a))
                     .setFullScreenIntent(pendingIntent, true)
                     .addAction(declineAction)
-                    .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
-                    .setCustomContentView(fillIncomingRemoteViewsForCall(call, false))
-                    .setCustomBigContentView(fillIncomingRemoteViewsForCall(call, false))
+            if (hasDoorAction) {
+                notificationBuilder.addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+            }
+            notificationBuilder
+                .setCustomContentView(fillIncomingRemoteViewsForCall(call, false))
+                .setCustomBigContentView(fillIncomingRemoteViewsForCall(call, false))
 
             if (acceptPendingIntent != null) {
                 notificationBuilder.addAction(R.drawable.notification_phone, Texts.get("call_button_accept"), acceptPendingIntent)
@@ -681,9 +687,10 @@ class NotificationsManager(private val context: Context) {
             body = Texts.get("notif_missed_calls", missedCallCount.toString())
             Log.i("[Notifications Manager] Updating missed calls notification count to $missedCallCount")
         } else {
+            val cleanNumber = call.remoteAddress.getCleanNumber()
             val name = DeviceStore.findDeviceByAddress(call.remoteAddress)?.name
-                ?: call.remoteAddress.username
-            body = Texts.get("notif_missed_call", name?:"device")
+                ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+            body = Texts.get("notif_missed_call", if (!name.isNullOrEmpty()) name else "device")
             Log.i("[Notifications Manager] Creating missed call notification")
         }
 
@@ -782,13 +789,14 @@ class NotificationsManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val callDevice = DeviceStore.findDeviceByAddress(call.remoteAddress)
+        val cleanNumber = call.remoteAddress.getCleanNumber()
+        val displayName = callDevice?.name ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+
         val builder = NotificationCompat.Builder(
             context, Texts.get("notification_channel_service_id")
         )
-            .setContentTitle(
-                DeviceStore.findDeviceByAddress(call.remoteAddress)?.name
-                    ?: call.remoteAddress.username
-            )
+            .setContentTitle(displayName)
             .setContentText(stringResourceId)
             .setSmallIcon(iconResourceId)
             .setAutoCancel(false)
@@ -801,7 +809,11 @@ class NotificationsManager(private val context: Context) {
             .setOngoing(true)
             .setColor(Theme.getColor("color_s"))
             .addAction(getCallDeclineAction(notifiable.notificationId))
-            .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+
+        val hasDoorAction = (callDevice?.actions?.isNotEmpty() == true) || LinhomeApplication.corePreferences.defaultAction1 != null
+        if (hasDoorAction) {
+            builder.addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+        }
 
         val thumbnailFile = call.callLog?.historyEvent()?.mediaThumbnail
         if (thumbnailFile != null && thumbnailFile.existsAndIsNotEmpty()) {
