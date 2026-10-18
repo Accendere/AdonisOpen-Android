@@ -44,6 +44,7 @@ class HistoryViewModel : ViewModel() {
     }
 
     init {
+        HistoryEventStore.pruneOldEvents(LinhomeApplication.corePreferences.historyRetentionDays)
         LinhomeApplication.coreContext.core.addListener(coreListener)
         history = MutableLiveData(LinhomeApplication.coreContext.core.callLogsWithNonEmptyCallId())
     }
@@ -71,20 +72,35 @@ class HistoryViewModel : ViewModel() {
     }
 
     fun deleteSelection() {
-        selectedForDeletion.value!!.forEach { callId ->
-            HistoryEventStore.removeHistoryEventByCallId(callId)
-            LinhomeApplication.coreContext.core.findCallLogFromCallId(callId)?.also { log ->
-                LinhomeApplication.coreContext.core.removeCallLog(log)
+        val toDelete = ArrayList(selectedForDeletion.value ?: emptyList())
+        if (toDelete.isEmpty()) return
+        val core = LinhomeApplication.coreContext.core
+        if (toDelete.size == history.value?.size) {
+            core.clearCallLogs()
+        } else {
+            toDelete.forEach { callId ->
+                core.findCallLogFromCallId(callId)?.also { log ->
+                    core.removeCallLog(log)
+                }
             }
-            history.value = LinhomeApplication.coreContext.core.callLogsWithNonEmptyCallId()
         }
+        HistoryEventStore.removeHistoryEventsByCallIds(toDelete)
+        history.value = core.callLogsWithNonEmptyCallId()
+    }
+
+    fun deleteAll() {
+        val allCallIds = history.value?.mapNotNull { it.callId } ?: emptyList()
+        if (allCallIds.isEmpty()) return
+        val core = LinhomeApplication.coreContext.core
+        core.clearCallLogs()
+        HistoryEventStore.removeHistoryEventsByCallIds(allCallIds)
+        selectedForDeletion.value?.clear()
+        history.value = core.callLogsWithNonEmptyCallId()
     }
 
     fun markEventsAsRead() {
-        history.value?.forEach {
-            it.historyEvent().viewedByUser = true
-            it.historyEvent().persist()
-        }
+        val events = history.value?.map { it.historyEvent() } ?: return
+        HistoryEventStore.markEventsAsReadBatch(events)
     }
 }
 

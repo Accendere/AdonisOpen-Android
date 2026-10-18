@@ -42,6 +42,7 @@ class HistoryEventViewModel(
 ) : ViewModelWithTools() {
 
     val viewMedia = MutableLiveData(false)
+    val addDevice = MutableLiveData(false)
 
     var historyEvent: HistoryEvent? = callLog.callId?.let {
         HistoryEventStore.findHistoryEventByCallId(it)
@@ -54,8 +55,10 @@ class HistoryEventViewModel(
 
 
     override fun onCleared() {
-        historyEvent?.viewedByUser = true
-        historyEvent?.let { HistoryEventStore.persistHistoryEvent(it) }
+        if (historyEvent?.viewedByUser == false) {
+            historyEvent?.viewedByUser = true
+            historyEvent?.let { HistoryEventStore.persistHistoryEvent(it) }
+        }
         super.onCleared()
     }
 
@@ -109,6 +112,10 @@ class HistoryEventViewModel(
 
     fun viewMedia() {
         viewMedia.value = true
+    }
+
+    fun addDeviceFromHistory() {
+        addDevice.value = true
     }
 
     fun isNew(): Boolean {

@@ -21,6 +21,7 @@
 package org.linhome.ui.history
 
 import android.content.Intent
+import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.databinding.DataBindingUtil
@@ -73,6 +74,15 @@ class HistoryEventsAdapter(
             entryViewModel.viewMedia.observe(linhomeFragment, Observer { play ->
                 if (play)
                     playMedia(callLog, linhomeFragment)
+            })
+            entryViewModel.addDevice.observe(linhomeFragment, Observer { add ->
+                if (add) {
+                    entryViewModel.addDevice.value = false
+                    val bundle = Bundle().apply {
+                        putString("address", callLog.remoteAddress.asStringUriOnly())
+                    }
+                    linhomeFragment.mainactivity.navController.navigate(R.id.navigation_device_edit, bundle)
+                }
             })
         }
 

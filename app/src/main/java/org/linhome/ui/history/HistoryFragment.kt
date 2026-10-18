@@ -42,6 +42,9 @@ class HistoryFragment : GenericFragment() {
 
     private lateinit var historyViewModel: HistoryViewModel
 
+    val isEditing: Boolean
+        get() = ::historyViewModel.isInitialized && historyViewModel.editing.value == true
+
     private lateinit var binding: FragmentHistoryBinding
 
     override fun onCreateView(
@@ -78,7 +81,9 @@ class HistoryFragment : GenericFragment() {
         })
 
         historyViewModel.history.observe(viewLifecycleOwner, Observer { list ->
-            mainactivity.toolbarViewModel.rightButtonVisible.value = !list.isEmpty()
+            val hasItems = list.isNotEmpty()
+            mainactivity.toolbarViewModel.rightButtonVisible.value = hasItems
+            mainactivity.toolbarViewModel.leftButtonVisible.value = hasItems || historyViewModel.editing.value == true
             (binding.loglist.adapter as HistoryEventsAdapter).callLogs = list
             binding.loglist.adapter?.notifyDataSetChanged()
         })
@@ -104,42 +109,85 @@ class HistoryFragment : GenericFragment() {
                     exitEdition()
                 }, (historyViewModel.selectedForDeletion.value!!.size).toString()
             )
-        } else
-            enterEdition()
+        } else {
+            val totalCount = historyViewModel.history.value?.size ?: 0
+            if (totalCount > 0) {
+                DialogUtil.confirm(
+                    "delete_all_history_confirm_message",
+                    { _: DialogInterface, _: Int ->
+                        historyViewModel.deleteAll()
+                        (binding.loglist.adapter as HistoryEventsAdapter).callLogs =
+                            historyViewModel.history.value!!
+                        binding.loglist.adapter?.notifyDataSetChanged()
+                        mainactivity.tabbarViewModel.updateUnreadCount()
+                        exitEdition()
+                    }, totalCount.toString()
+                )
+            }
+        }
     }
 
     override fun onToolbarLeftButtonClicked() {
-        exitEdition()
+        if (historyViewModel.editing.value == true) {
+            exitEdition()
+        } else {
+            enterEdition()
+        }
+    }
+
+    fun updateToolbarButtons() {
+        val isEditing = historyViewModel.editing.value == true
+        val hasItems = !historyViewModel.history.value.isNullOrEmpty()
+        Theme.setIcon("icons/delete", mainactivity.binding.appbar.toolbarRightButtonImage)
+        if (isEditing) {
+            Theme.setIcon("icons/cancel", mainactivity.binding.appbar.toolbarLeftButtonImage)
+            mainactivity.binding.appbar.toolbarLeftButtonTitle.text = Texts.get("cancel")
+            mainactivity.binding.appbar.toolbarRightButtonTitle.text = Texts.get("delete")
+            mainactivity.toolbarViewModel.leftButtonVisible.value = true
+            mainactivity.toolbarViewModel.rightButtonVisible.value = true
+            mainactivity.toolbarViewModel.burgerButtonVisible.value = false
+            mainactivity.toolbarViewModel.backButtonVisible.value = false
+            mainactivity.binding.appbar.contentmain.tabbar.visibility = View.GONE
+        } else {
+            Theme.setIcon("icons/edit", mainactivity.binding.appbar.toolbarLeftButtonImage)
+            mainactivity.binding.appbar.toolbarLeftButtonTitle.text = Texts.get("select")
+            mainactivity.binding.appbar.toolbarRightButtonTitle.text = Texts.get("clear_all")
+            mainactivity.toolbarViewModel.leftButtonVisible.value = hasItems
+            mainactivity.toolbarViewModel.rightButtonVisible.value = hasItems
+            mainactivity.toolbarViewModel.burgerButtonVisible.value = true
+            mainactivity.toolbarViewModel.backButtonVisible.value = false
+            mainactivity.binding.appbar.contentmain.tabbar.visibility = View.VISIBLE
+            mainactivity.binding.appbar.toolbarRightButton.isEnabled = true
+            mainactivity.binding.appbar.toolbarRightButton.alpha = 1.0f
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        Theme.setIcon("icons/delete", mainactivity.binding.appbar.toolbarRightButtonImage)
-        Theme.setIcon("icons/cancel", mainactivity.binding.appbar.toolbarLeftButtonImage)
-        mainactivity.binding.appbar.toolbarLeftButtonTitle.text = Texts.get("cancel")
-        mainactivity.binding.appbar.toolbarRightButtonTitle.text = Texts.get("delete")
-        mainactivity.toolbarViewModel.rightButtonVisible.value =
-            !historyViewModel.history.value!!.isEmpty()
+        updateToolbarButtons()
         coreContext.notificationsManager.dismissMissedCallNotification()
         binding.loglist.adapter?.notifyDataSetChanged()
         mainactivity.tabBarLayoutClicked(mainactivity.binding.appbar.contentmain.tabbarHistory, mainactivity.binding.appbar.contentmain.tabbarDevices)
     }
 
     fun enterEdition() {
-        mainactivity.toolbarViewModel.leftButtonVisible.value = true
         historyViewModel.editing.value = true
+        updateToolbarButtons()
         historyViewModel.notifyDeleteSelectionListUpdated()
     }
 
     fun exitEdition() {
-        mainactivity.toolbarViewModel.leftButtonVisible.value = false
         historyViewModel.editing.value = false
         historyViewModel.selectedForDeletion.value!!.clear()
+        updateToolbarButtons()
         historyViewModel.notifyDeleteSelectionListUpdated()
     }
 
 
     override fun onPause() {
+        if (historyViewModel.editing.value == true) {
+            exitEdition()
+        }
         historyViewModel.markEventsAsRead()
         mainactivity.tabbarViewModel.updateUnreadCount()
         super.onPause()

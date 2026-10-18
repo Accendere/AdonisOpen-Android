@@ -53,9 +53,7 @@ class PlayerActivity : GenericActivity() {
         super.onCreate(savedInstanceState)
 
         val decorView: View = window.decorView
-        val uiOptions: Int =
-            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        decorView.systemUiVisibility = uiOptions
+        decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
 
         var seekTo = 0
         var playing = true

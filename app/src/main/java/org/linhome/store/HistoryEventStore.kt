@@ -20,10 +20,15 @@
 
 package org.linhome.store
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import org.linhome.LinhomeApplication
 import org.linhome.entities.HistoryEvent
 import org.linhome.store.StorageManager.historyEventsXml
 import org.linphone.core.Config
 import org.linphone.core.Factory
+import java.io.File
 
 
 object HistoryEventStore {
@@ -43,25 +48,30 @@ object HistoryEventStore {
     fun readFromXml(): HashMap<String, HistoryEvent> {
         val result = HashMap<String, HistoryEvent>()
         historyEventsConfig.sectionsNamesList.forEach {
-            result.put(
-                historyEventsConfig.getString(it, "call_id", null)!!, HistoryEvent(
+            val callId = historyEventsConfig.getString(it, "call_id", null)
+            val mediaFile = historyEventsConfig.getString(it, "media_file_name", null)
+            val thumbFile = historyEventsConfig.getString(it, "media_thumbnail_file_name", null)
+            if (callId != null && mediaFile != null && thumbFile != null) {
+                result[callId] = HistoryEvent(
                     it,
-                    historyEventsConfig.getString(it, "call_id", null),
+                    callId,
                     historyEventsConfig.getBool(it, "viewed_by_user", false),
-                    historyEventsConfig.getString(it, "media_file_name", null)!!,
-                    historyEventsConfig.getString(it, "media_thumbnail_file_name", null)!!,
+                    mediaFile,
+                    thumbFile,
                     historyEventsConfig.getBool(it, "has_video", false)
                 )
-            )
+            }
         }
         return result
     }
 
+    @Synchronized
     fun sync() {
+        val snapshot = HashMap(historyEvents)
         historyEventsConfig.sectionsNamesList.forEach {
             historyEventsConfig.cleanSection(it)
         }
-        historyEvents.forEach { entry ->
+        snapshot.forEach { entry ->
             historyEventsConfig.setBool(entry.value.id, "viewed_by_user", entry.value.viewedByUser)
             historyEventsConfig.setString(
                 entry.value.id,
@@ -79,24 +89,30 @@ object HistoryEventStore {
         historyEventsXml.writeText(historyEventsConfig.dumpAsXml())
     }
 
-    fun persistHistoryEvent(entry: HistoryEvent) {
-        entry.callId?.let {
-            historyEvents.put(it, entry)
+    private fun syncAsync() {
+        GlobalScope.launch(Dispatchers.IO) {
             sync()
         }
     }
 
+    @Synchronized
+    fun persistHistoryEvent(entry: HistoryEvent) {
+        entry.callId?.let {
+            historyEvents[it] = entry
+            syncAsync()
+        }
+    }
+
+    @Synchronized
     fun removeHistoryEvent(entry: HistoryEvent) {
-        entry.media.also {
-            if (it.exists())
-                it.delete()
-        }
-        entry.mediaThumbnail.also {
-            if (it.exists())
-                it.delete()
-        }
+        val mediaFile = entry.media
+        val thumbFile = entry.mediaThumbnail
         historyEvents.remove(entry.callId)
-        sync()
+        GlobalScope.launch(Dispatchers.IO) {
+            if (mediaFile.exists()) mediaFile.delete()
+            if (thumbFile.exists()) thumbFile.delete()
+            sync()
+        }
     }
 
     fun removeHistoryEventByCallId(callId: String) {
@@ -105,14 +121,69 @@ object HistoryEventStore {
         }
     }
 
+    @Synchronized
+    fun removeHistoryEventsByCallIds(callIds: Collection<String>) {
+        if (callIds.isEmpty()) return
+        val filesToDelete = ArrayList<File>(callIds.size * 2)
+        callIds.forEach { callId ->
+            historyEvents.remove(callId)?.also { entry ->
+                filesToDelete.add(entry.media)
+                filesToDelete.add(entry.mediaThumbnail)
+            }
+        }
+        GlobalScope.launch(Dispatchers.IO) {
+            filesToDelete.forEach { file ->
+                if (file.exists()) {
+                    file.delete()
+                }
+            }
+            sync()
+        }
+    }
+
+    @Synchronized
+    fun markEventsAsReadBatch(events: Collection<HistoryEvent>) {
+        var changed = false
+        events.forEach { event ->
+            if (!event.viewedByUser) {
+                event.viewedByUser = true
+                event.callId?.let { callId ->
+                    historyEvents[callId] = event
+                }
+                changed = true
+            }
+        }
+        if (changed) {
+            syncAsync()
+        }
+    }
+
+    fun pruneOldEvents(maxAgeDays: Int) {
+        if (maxAgeDays <= 0 || !LinhomeApplication.contextExists()) return
+        val core = LinhomeApplication.coreContext.core
+        val cutoffSeconds = (System.currentTimeMillis() / 1000L) - (maxAgeDays.toLong() * 86400L)
+        val expiredCallIds = ArrayList<String>()
+        core.callLogs.forEach { log ->
+            if (log.startDate < cutoffSeconds) {
+                log.callId?.let { expiredCallIds.add(it) }
+                core.removeCallLog(log)
+            }
+        }
+        if (expiredCallIds.isNotEmpty()) {
+            removeHistoryEventsByCallIds(expiredCallIds)
+        }
+    }
+
     fun findHistoryEventByCallId(callId: String): HistoryEvent? {
-        return historyEvents.get(callId)
+        return historyEvents[callId]
     }
 
     fun markAsRead(historyEventId: String) {
-        historyEvents.filter { it.value.id ==  historyEventId }.forEach { event ->
-            event.value.viewedByUser = true
-            persistHistoryEvent(event.value)
+        historyEvents.filter { it.value.id == historyEventId }.forEach { event ->
+            if (!event.value.viewedByUser) {
+                event.value.viewedByUser = true
+                persistHistoryEvent(event.value)
+            }
         }
     }
 

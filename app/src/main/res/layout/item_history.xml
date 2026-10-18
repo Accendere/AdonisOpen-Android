@@ -23,8 +23,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="start"
-            android:layout_marginBottom="10dp"
-            android:layout_marginTop="10dp"
+            android:layout_marginBottom="8dp"
+            android:layout_marginTop="12dp"
+            android:layout_marginStart="4dp"
             style='@{"history_list_day_name"}'
             android:visibility='@{model.showDate ? View.VISIBLE : View.GONE, default="gone"}'
             android:text='@{model.dayText()}' />
@@ -35,27 +36,28 @@
             android:onClick="@{() -> historymodel.editing ? model.toggleSelect() : model.viewMedia()}"
             android:focusable="true"
             android:layout_width="match_parent"
-            android:layout_height="95dp"
-            app:contentPadding="2dp"
-            android:elevation="6dp"
-            app:cardElevation="6dp"
+            android:layout_height="102dp"
+            app:contentPadding="1dp"
+            android:elevation="2dp"
+            app:cardElevation="2dp"
             app:cardPreventCornerOverlap="true"
-            roundRectWithColor='@{"color_c"}'
+            roundRectWithColor='@{"color_d"}'
             andRadius='@{"call_in_history_list_corner_radius"}'
-            andStrokeWidth='@{2}'
-            andStrokeColor='@{!model.isNew() ? "color_c" : "color_t"}'
+            andStrokeWidth='@{!model.isNew() ? 1 : 2}'
+            andStrokeColor='@{!model.isNew() ? "color_h" : "color_a"}'
             selected_stroke_color='@{"color_a"}'>
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                app:cardElevation="0dp"
                 app:cardPreventCornerOverlap="true"
-                roundRectWithColor='@{"color_c"}'
+                roundRectWithColor='@{"color_d"}'
                 andRadius='@{"call_in_history_list_corner_radius"}'>
 
                 <RelativeLayout
                     android:id="@+id/media"
-                    android:layout_width="93dp"
+                    android:layout_width="96dp"
                     android:layout_height="match_parent"
                     >
 
@@ -65,7 +67,7 @@
                         android:layout_height="match_parent"
                         android:layout_alignParentStart="true"
                         glidewith ='@{model.historyEvent.mediaThumbnail}'
-                        android:visibility='@{model.historyEvent.hasMedia() &amp;&amp; model.historyEvent.hasMediaThumbnail() ? View.VISIBLE : View.GONE, default="gone"}'
+                        android:visibility='@{model.historyEvent.hasMediaThumbnail() ? View.VISIBLE : View.GONE, default="gone"}'
                         android:scaleType="centerCrop"/>
 
                     <TextView
@@ -76,7 +78,7 @@
                         text='@{"history_no_media_found"}'
                         backgoundcolor='@{"color_u"}'
                         android:layout_centerInParent="true"
-                        android:visibility='@{model.historyEvent.hasMedia() ? View.GONE : View.VISIBLE, default="visible"}'
+                        android:visibility='@{model.historyEvent.hasMedia() || model.historyEvent.hasMediaThumbnail() ? View.GONE : View.VISIBLE, default="visible"}'
                         android:text="No media" />
 
                     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -87,27 +89,29 @@
                         backgroundcolor='@{historymodel.editing ? "color_b" : null}'
                         tint='@{"color_c"}'
                         icon='@{"icons/play"}'
-                        app:fabCustomSize="33dp"
+                        app:fabCustomSize="34dp"
                         app:maxImageSize="12dp"
-                        android:layout_width="33dp"
-                        android:layout_height="33dp"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
                         android:layout_gravity="center"
-                        app:elevation="0dp"
+                        app:elevation="2dp"
                         android:layout_centerInParent="true"
                         android:visibility='@{model.historyEvent.hasMedia() ? View.VISIBLE : View.GONE, default="visible"}'
                         />
                 </RelativeLayout>
 
                 <RelativeLayout
-                    android:layout_marginStart="100dp"
+                    android:layout_marginStart="110dp"
+                    android:paddingEnd="10dp"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="match_parent">
 
                     <TextView
                         android:id="@+id/name"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="19dp"
+                        android:layout_marginTop="14dp"
+                        android:singleLine="true"
                         style='@{"history_list_device_name"}'
                         text='@{model.device != null ?  model.device.name : model.getText("history_unregistered_device")}'
                         android:text="Name" />
@@ -117,7 +121,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_below="@+id/name"
-                        android:layout_marginTop="1dp"
+                        android:layout_marginTop="2dp"
+                        android:singleLine="true"
                         android:text='@{model.callLog.remoteAddress.asStringUriOnly(), default="address"}'
                         style='@{"history_list_device_address"}'
                         />
@@ -125,10 +130,9 @@
                     <ImageView
                         android:id="@+id/logtypeicon"
                         icon='@{model.callTypeIcon()}'
-                        android:layout_width="32dp"
-                        android:layout_height="16dp"
-                        android:layout_marginTop="15dp"
-                        android:layout_marginStart="3dp"
+                        android:layout_width="24dp"
+                        android:layout_height="15dp"
+                        android:layout_marginTop="12dp"
                         android:layout_below="@+id/address"
                         android:scaleType="centerInside"/>
 
@@ -139,10 +143,27 @@
                         android:gravity="center_vertical"
                         android:layout_below="@+id/address"
                         android:layout_toEndOf="@+id/logtypeicon"
-                        android:layout_marginTop="15dp"
-                        android:layout_marginStart="8dp"
+                        android:layout_marginTop="11dp"
+                        android:layout_marginStart="6dp"
                         style='@{"history_list_call_date"}'
                         android:text='@{model.callTypeAndDate(), default="call"}' />
+
+                    <org.linhome.ui.widgets.LRoundRectButton
+                        android:id="@+id/add_device_button"
+                        android:layout_width="wrap_content"
+                        android:layout_height="28dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:layout_alignParentBottom="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_marginEnd="2dp"
+                        android:layout_marginBottom="8dp"
+                        android:clickable="true"
+                        android:focusable="true"
+                        primary='@{true}'
+                        text='@{"history_add_device"}'
+                        android:onClick="@{() -> model.addDeviceFromHistory()}"
+                        android:visibility='@{model.device == null &amp;&amp; !historymodel.editing ? View.VISIBLE : View.GONE, default="gone"}' />
 
                     <TextView
                         android:id="@+id/newtag"
@@ -151,9 +172,8 @@
                         android:gravity="center_vertical"
                         android:layout_alignParentTop="true"
                         android:layout_alignParentEnd="true"
-                        android:layout_marginBottom="17dp"
-                        android:layout_marginTop="7dp"
-                        android:layout_marginEnd="5dp"
+                        android:layout_marginTop="10dp"
+                        android:layout_marginEnd="4dp"
                         style='@{"history_list_new_tag"}'
                         text='@{"history_call_new"}'
                         android:visibility='@{model.isNew() &amp;&amp; !historymodel.editing? View.VISIBLE : View.INVISIBLE, default="gone"}'
@@ -165,8 +185,8 @@
                         android:layout_height="wrap_content"
                         android:layout_alignParentTop="true"
                         android:layout_alignParentEnd="true"
-                        android:layout_marginTop="-4dp"
-                        android:layout_marginEnd="-15dp"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginEnd="0dp"
                         android:onClick="@{() -> model.toggleSelect()}"
                         android:checked='@{historymodel.editing &amp;&amp; historymodel.selectedForDeletion.contains(model.callLog.callId)  ? true : false, default=false}'
                         android:visibility='@{historymodel.editing ? View.VISIBLE : View.INVISIBLE, default="visible"}'
