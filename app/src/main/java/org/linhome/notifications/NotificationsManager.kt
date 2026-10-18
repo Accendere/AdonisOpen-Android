@@ -163,7 +163,7 @@ class NotificationsManager(private val context: Context) {
                             fileLenght = it.length()
                             val bitmap = BitmapFactory.decodeFile(it.absolutePath)
                             val notifiable = getNotifiableForCall(call)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && bitmap != null) {
+                            if (bitmap != null) {
                                 val cleanNumber = call.remoteAddress.getCleanNumber()
                                 val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
                                 val contactName = if (device == null) ContactsHelper.findContactNameByNumber(cleanNumber) else null
@@ -191,6 +191,8 @@ class NotificationsManager(private val context: Context) {
                                     addNextIntentWithParentStack(notificationTrampolineActivityIntent)
                                     getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                                 }
+                                val hasDoorAction = (device?.actions?.isNotEmpty() == true) || LinhomeApplication.corePreferences.defaultAction1 != null
+
                                 notificationBuilder =
                                     NotificationCompat.Builder(context, Texts.get("notification_channel_incoming_call_id"))
                                         .setSmallIcon(R.drawable.notification_phone)
@@ -201,7 +203,6 @@ class NotificationsManager(private val context: Context) {
                                             NotificationCompat.BigPictureStyle()
                                                 .bigPicture(bitmap)
                                                 .bigLargeIcon(null as Bitmap?)
-                                                .showBigPictureWhenCollapsed(true)
                                         )
                                         .setContentIntent(pendingIntent)
                                         .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -214,7 +215,11 @@ class NotificationsManager(private val context: Context) {
                                         .setColor(ContextCompat.getColor(context, R.color.color_a))
                                         .setFullScreenIntent(pendingIntent, true)
                                         .addAction(getCallDeclineAction(notifiable.notificationId))
-                                        .addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+
+                                if (hasDoorAction) {
+                                    notificationBuilder.addAction(getCallOpenDoorAction(notifiable.notificationId, call))
+                                }
+
                                 if (acceptPendingIntent != null) {
                                     notificationBuilder.addAction(
                                         R.drawable.notification_phone,
@@ -222,20 +227,6 @@ class NotificationsManager(private val context: Context) {
                                         acceptPendingIntent
                                     )
                                 }
-                            } else {
-                                val remoteView = fillIncomingRemoteViewsForCall(call, true)
-                                val awt = AppWidgetTarget(
-                                    context.applicationContext,
-                                    R.id.caller_picture,
-                                    remoteView,
-                                    0
-                                )
-                                Glide.with(context.applicationContext).asBitmap().load(it).into(awt)
-                                if (bitmap != null) {
-                                    notificationBuilder.setLargeIcon(bitmap)
-                                }
-                                notificationBuilder.setCustomBigContentView(remoteView)
-                                notificationBuilder.setCustomContentView(remoteView)
                             }
                             val notification = notificationBuilder.build()
                             if (!LinhomeApplication.someActivityRunning && (call.state == Call.State.IncomingEarlyMedia || call.state == Call.State.IncomingReceived))
@@ -598,12 +589,17 @@ class NotificationsManager(private val context: Context) {
 
         val hasDoorAction = (device?.actions?.isNotEmpty() == true) || LinhomeApplication.corePreferences.defaultAction1 != null
 
+        val iconBitmap = device?.typeIconAsBitmap ?: if (!hasVideo) Device.typeIconAsBitmap("phone_call") else DeviceTypes.defaultTypeIconAsBitmap
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Use CallStyle on API 31+ for proper system handling on lock screen
-            val caller = androidx.core.app.Person.Builder()
+            val callerBuilder = androidx.core.app.Person.Builder()
                 .setName(displayName)
                 .setImportant(true)
-                .build()
+            if (iconBitmap != null) {
+                callerBuilder.setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(iconBitmap))
+            }
+            val caller = callerBuilder.build()
 
             val callStyle = NotificationCompat.CallStyle.forIncomingCall(
                 caller,
@@ -631,7 +627,6 @@ class NotificationsManager(private val context: Context) {
         } else {
             notificationBuilder =
                 NotificationCompat.Builder(context, Texts.get("notification_channel_incoming_call_id"))
-                    .setStyle(NotificationCompat.DecoratedCustomViewStyle())
                     .setSmallIcon(R.drawable.notification_phone)
                     .setContentTitle(displayName)
                     .setContentText(Texts.get(if (hasVideo) "notif_incoming_call_video" else if (device == null) "incoming_voice_call" else "notif_incoming_call_audio"))
@@ -646,12 +641,14 @@ class NotificationsManager(private val context: Context) {
                     .setColor(ContextCompat.getColor(context, R.color.color_a))
                     .setFullScreenIntent(pendingIntent, true)
                     .addAction(declineAction)
+
+            if (iconBitmap != null) {
+                notificationBuilder.setLargeIcon(iconBitmap)
+            }
+
             if (hasDoorAction) {
                 notificationBuilder.addAction(getCallOpenDoorAction(notifiable.notificationId, call))
             }
-            notificationBuilder
-                .setCustomContentView(fillIncomingRemoteViewsForCall(call, false))
-                .setCustomBigContentView(fillIncomingRemoteViewsForCall(call, false))
 
             if (acceptPendingIntent != null) {
                 notificationBuilder.addAction(R.drawable.notification_phone, Texts.get("call_button_accept"), acceptPendingIntent)
@@ -890,8 +887,13 @@ class NotificationsManager(private val context: Context) {
         )
 
         val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
-        val firstActionName = device?.actions?.firstOrNull()?.actionText()
-            ?: Texts.get("call_open_door_button")
+        val firstAction = device?.actions?.firstOrNull()
+        val firstActionName = when (firstAction?.type) {
+            "action_open_gate" -> Texts.get("action_open_gate_short") ?: Texts.get("action_open_gate") ?: "Open gate"
+            "action_lightup" -> Texts.get("action_lightup_short") ?: Texts.get("action_lightup") ?: "Light"
+            "action_unlock" -> Texts.get("action_unlock_short") ?: Texts.get("action_unlock") ?: "Unlock"
+            else -> Texts.get("call_open_door_button") ?: "Open door"
+        }
 
         return NotificationCompat.Action.Builder(
             R.drawable.notification_door,

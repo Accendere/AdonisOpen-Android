@@ -195,26 +195,38 @@ data class Device(
             return result
         }
 
-        fun typeIconAsBitmap(type: String?): Bitmap? {
+        fun typeIconAsBitmap(type: String?, circle: Boolean = true): Bitmap? {
             return type?.let {
+                val iconName = (if (circle) DeviceTypes.iconNameForDeviceType(it, true) else null)
+                    ?: DeviceTypes.iconNameForDeviceType(it, false)
+                    ?: return null
                 val svgFile = File(
                     LinhomeApplication.instance.filesDir,
-                    "images/${DeviceTypes.iconNameForDeviceType(it)}.svg"
+                    "images/${iconName}.svg"
                 )
-                val targetStream = FileInputStream(svgFile)
-                val svg = SVG.getFromInputStream(targetStream)
-                if (svg.documentWidth != -1f) {
+                if (!svgFile.exists()) {
+                    return null
+                }
+                try {
+                    val targetStream = FileInputStream(svgFile)
+                    val svg = SVG.getFromInputStream(targetStream)
+                    val docW = if (svg.documentWidth > 0f) svg.documentWidth else 96f
+                    val docH = if (svg.documentHeight > 0f) svg.documentHeight else 96f
+                    val width = Math.ceil(docW.toDouble()).toInt().coerceAtLeast(48)
+                    val height = Math.ceil(docH.toDouble()).toInt().coerceAtLeast(48)
                     val newBM = Bitmap.createBitmap(
-                        Math.ceil(svg.documentWidth.toDouble()).toInt(),
-                        Math.ceil(svg.documentHeight.toDouble()).toInt(),
+                        width,
+                        height,
                         Bitmap.Config.ARGB_8888
                     )
                     val bmcanvas = Canvas(newBM)
-                    bmcanvas.drawRGB(255, 255, 255)
+                    // Transparent background: do NOT draw solid white RGB
                     svg.renderToCanvas(bmcanvas)
                     newBM
-                } else
+                } catch (e: Exception) {
+                    org.linphone.core.tools.Log.e("[Device] Error rendering SVG icon $iconName to bitmap: $e")
                     null
+                }
             }
         }
 
