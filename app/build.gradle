@@ -86,11 +86,11 @@ def crashlyticsForNdkEnabled = new File(projectDir.absolutePath + '/google-servi
 android {
     compileSdk = 36
     defaultConfig {
-        applicationId "org.linhome"
+        applicationId "org.probonis"
         minSdkVersion 23
         targetSdkVersion 36
-        versionCode 39
-        versionName "1.4.2"
+        versionCode 40
+        versionName "1.5.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -99,7 +99,7 @@ android {
                 linhome_file_provider: applicationId + ".fileprovider"
         ]
         variant.outputs.all {
-            outputFileName = "linhome-android-${variant.buildType.name}-${project.version}.apk"
+            outputFileName = "adonis-open-${variant.buildType.name}-${project.version}.apk"
         }
     }
 

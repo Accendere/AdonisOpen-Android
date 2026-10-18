@@ -42,6 +42,22 @@ class AboutFragment : Fragment() {
         binding.coreContext = LinhomeApplication.coreContext
 
 
+        binding.sourceCode.setOnClickListener {
+            val browserIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(Texts.get("about_source_url"))
+            )
+            startActivity(browserIntent)
+        }
+
+        binding.upstreamLink.setOnClickListener {
+            val browserIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse(Texts.get("about_upstream_url"))
+            )
+            startActivity(browserIntent)
+        }
+
         binding.licence.setOnClickListener {
             val browserIntent = Intent(
                 Intent.ACTION_VIEW,

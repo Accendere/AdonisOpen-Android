@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">Linhome</string>
+    <string name="app_name">Adonis Open</string>
+    <string name="widget_receive_calls_label">Adonis Calls</string>
 </resources>

@@ -41,6 +41,30 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041242817246:android:07473278f9da59cecff84f",
+        "android_client_info": {
+          "package_name": "org.probonis"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1041242817246-g794hhtgv48btoi0qtv5gmq6k76ds40c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhAgohVJwuGSu-4F0lUUV_eib3qQh2ASM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"
