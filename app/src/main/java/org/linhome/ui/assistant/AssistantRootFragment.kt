@@ -45,7 +45,7 @@ class AssistantRootFragment : GenericFragment() {
             navigateToCompotent(R.id.navigation_assistant_login_sip)
         }
         binding.remote.setOnClickListener {
-            navigateToCompotent(R.id.navigation_assistant_remote_root)
+            mainactivity.navController.navigate(R.id.navigation_assistant_remote_root)
         }
         return binding.root
     }

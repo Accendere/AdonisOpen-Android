@@ -6,9 +6,7 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-parcelize'
-    id 'com.google.gms.google-services'
     id "androidx.navigation.safeargs"
-    id 'com.google.firebase.crashlytics'
 }
 
 tasks.register("zipTheme", Zip) {
@@ -79,9 +77,18 @@ tasks.named("preBuild").configure {
     dependsOn(tasks.named("getGitVersion"))
 }
 
-def crashlyticsForNdkEnabled = new File(projectDir.absolutePath + '/google-services.json').exists() &&
-        new File(LinphoneSdkBuildDir + '/libs/').exists() &&
-        new File(LinphoneSdkBuildDir + '/libs-debug/').exists()
+// Release signing is optional and never committed to the repository.
+// Provide credentials either via an untracked keystore.properties file at the
+// project root (see keystore.properties.example) or via environment variables:
+//   ADONIS_KEYSTORE_FILE, ADONIS_KEYSTORE_PASSWORD, ADONIS_KEY_ALIAS, ADONIS_KEY_PASSWORD
+// When no keystore is configured, release builds are produced unsigned.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def releaseStoreFilePath = keystoreProperties['storeFile'] ?: System.getenv("ADONIS_KEYSTORE_FILE")
+def hasReleaseSigning = releaseStoreFilePath && rootProject.file(releaseStoreFilePath).exists()
 
 android {
     compileSdk = 36
@@ -104,14 +111,13 @@ android {
     }
 
     signingConfigs {
-        release {
-            def keystorePropertiesFile = rootProject.file("keystore.properties")
-            def keystoreProperties = new Properties()
-            keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-            storeFile file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
+        if (hasReleaseSigning) {
+            release {
+                storeFile rootProject.file(releaseStoreFilePath)
+                storePassword keystoreProperties['storePassword'] ?: System.getenv("ADONIS_KEYSTORE_PASSWORD")
+                keyAlias keystoreProperties['keyAlias'] ?: System.getenv("ADONIS_KEY_ALIAS")
+                keyPassword keystoreProperties['keyPassword'] ?: System.getenv("ADONIS_KEY_PASSWORD")
+            }
         }
     }
 
@@ -124,23 +130,13 @@ android {
     buildTypes {
         release {
             minifyEnabled true
-            signingConfig signingConfigs.release
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                     'proguard-rules.pro'
-            if (crashlyticsForNdkEnabled) {
-                firebaseCrashlytics {
-                    nativeSymbolUploadEnabled true
-                    unstrippedNativeLibsDir file(LinphoneSdkBuildDir + '/libs-debug/').toString()
-                }
-            }
         }
         debug {
-            if (crashlyticsForNdkEnabled) {
-                firebaseCrashlytics {
-                    nativeSymbolUploadEnabled true
-                    unstrippedNativeLibsDir file(LinphoneSdkBuildDir + '/libs-debug/').toString()
-                }
-            }
         }
     }
 
@@ -185,25 +181,7 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
     implementation 'com.caverock:androidsvg-aar:1.4'
 
-    // Firebase
-    implementation 'com.google.firebase:firebase-messaging:25.0.1'
-    implementation 'com.google.firebase:firebase-analytics:23.0.0'
-    implementation 'com.google.firebase:firebase-crashlytics:20.0.2'
-
     implementation 'com.github.ybq:Android-SpinKit:1.4.0'
     implementation "androidx.media:media:1.7.1"
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.2.0-beta01'
-
-    if (crashlyticsForNdkEnabled) {
-        implementation 'com.google.firebase:firebase-crashlytics-ndk:18.3.7'
-    } else {
-        compileOnly 'com.google.firebase:firebase-crashlytics-ndk:18.3.7'
-    }
-}
-
-if (crashlyticsForNdkEnabled) {
-    afterEvaluate {
-        assembleRelease.finalizedBy(uploadCrashlyticsSymbolFileRelease)
-        assembleDebug.finalizedBy(uploadCrashlyticsSymbolFileDebug)
-    }
 }

@@ -1,8 +1,9 @@
 /*
  * Copyright (c) 2010-2020 Belledonne Communications SARL.
+ * Modifications Copyright (c) 2026 Adonis Open Contributors.
  *
- * This file is part of linhome-android
- * (see https://www.linhome.org).
+ * This file is part of Adonis Open (fork of linhome-android,
+ * see https://www.linhome.org).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -50,6 +51,12 @@ class RemoteQrAccountFragment : GenericFragment() {
         binding = FragmentAssistantRemoteQrBinding.inflate(inflater, container, false)
         binding.lifecycleOwner = this
         val model = ViewModelProvider(this).get(RemoteAnyAccountViewModel::class.java)
+        model.adonisConfigFound.observe(viewLifecycleOwner, Observer { parsedConfig ->
+            if (parsedConfig != null) {
+                model.adonisConfigFound.value = null
+                mainactivity.promptAdonisAutoConfig(parsedConfig)
+            }
+        })
         model.configurationResult.observe(viewLifecycleOwner, Observer { status ->
             hideProgress()
             when (status) {

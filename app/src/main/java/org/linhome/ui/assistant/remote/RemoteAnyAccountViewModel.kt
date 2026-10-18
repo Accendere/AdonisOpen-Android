@@ -43,6 +43,7 @@ class RemoteAnyAccountViewModel : FlexiApiPushAccountCreationViewModel(corePrefe
     var url: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> = Pair(MutableLiveData(), MutableLiveData(false))
 
     var configurationResult = MutableLiveData<ConfiguringState>()
+    var adonisConfigFound = MutableLiveData<org.linhome.utils.AdonisConfig?>()
 
 
     private val coreListener = object : CoreListenerStub() {
@@ -58,15 +59,14 @@ class RemoteAnyAccountViewModel : FlexiApiPushAccountCreationViewModel(corePrefe
                 coreContext.core.isQrcodeVideoPreviewEnabled = false
                 coreContext.core.isVideoPreviewEnabled = false
                 if (qr != null && org.linhome.utils.AdonisProvisioner.isAdonisConfig(qr)) {
-                    val handled = org.linhome.utils.AdonisProvisioner.provisionFromRaw(qr, coreContext.context) { success, _ ->
-                        if (success) {
-                            configurationResult.postValue(ConfiguringState.Successful)
-                            pushReady.postValue(true)
-                        } else {
-                            configurationResult.postValue(ConfiguringState.Failed)
-                        }
+                    val parsedConfig = org.linhome.utils.AdonisProvisioner.parse(qr)
+                    if (parsedConfig != null) {
+                        adonisConfigFound.postValue(parsedConfig)
+                        return@launch
                     }
-                    if (handled) return@launch
+                }
+                if (LinhomeAccount.configured()) {
+                    LinhomeAccount.disconnect(deletePushAccount = true)
                 }
                 url.first.value = qr
                 startRemoteProvisionning()

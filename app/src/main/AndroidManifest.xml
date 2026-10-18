@@ -158,12 +158,6 @@
                 android:value="Needed to keep the app alive in order to receive calls from intercom/door-entry devices through SIP servers for which push notifications aren't available." />
         </service>
 
-        <service android:name="org.linphone.core.tools.firebase.FirebaseMessaging" android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${linhome_file_provider}"

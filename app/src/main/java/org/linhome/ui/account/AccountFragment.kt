@@ -40,6 +40,8 @@ import org.linhome.utils.DialogUtil
 
 class AccountFragment : Fragment() {
 
+    private var accountViewModel: AccountViewModel? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -47,8 +49,13 @@ class AccountFragment : Fragment() {
     ): View? {
         val binding = FragmentAccountBinding.inflate(inflater, container, false)
         val model = ViewModelProvider(this).get(AccountViewModel::class.java)
+        accountViewModel = model
         binding.model = model
-        binding.lifecycleOwner  = this
+        binding.lifecycleOwner  = viewLifecycleOwner
+
+        LinhomeAccount.appEnabledLiveData.observe(viewLifecycleOwner) {
+            model.refreshDescriptions()
+        }
 
         binding.setupSip.setOnClickListener {
             findNavController().navigate(R.id.navigation_assistant_login_sip)
@@ -82,6 +89,11 @@ class AccountFragment : Fragment() {
 
 
         return binding.root
+    }
+
+    override fun onResume() {
+        super.onResume()
+        accountViewModel?.refreshDescriptions()
     }
 
     fun gotoFreeSip() {

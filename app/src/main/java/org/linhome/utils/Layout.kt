@@ -1,8 +1,9 @@
 /*
  * Copyright (c) 2010-2020 Belledonne Communications SARL.
+ * Modifications Copyright (c) 2026 Adonis Open Contributors.
  *
- * This file is part of linhome-android
- * (see https://www.linhome.org).
+ * This file is part of Adonis Open (fork of linhome-android,
+ * see https://www.linhome.org).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,11 +22,11 @@
 package org.linhome.utils
 
 import android.graphics.BitmapFactory
-import com.google.android.gms.common.images.Size
 import org.linhome.LinhomeApplication
 import org.linhome.utils.extensions.existsAndIsNotEmpty
 import java.io.File
 
+data class Size(val width: Int, val height: Int)
 
 fun pxFromDp(dp: Int): Int {
     return (dp * LinhomeApplication.instance.resources.displayMetrics.density).toInt()

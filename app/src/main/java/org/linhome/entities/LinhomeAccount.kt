@@ -35,6 +35,8 @@ object LinhomeAccount {
 
     const val PUSH_GW_ID_KEY = "linhome_pushgateway"
 
+    val appEnabledLiveData = MutableLiveData<Boolean>()
+
     private lateinit var coreListener : CoreListenerStub
 
     fun configured(): Boolean {
@@ -110,6 +112,7 @@ object LinhomeAccount {
 
     fun setAppEnabled(enabled: Boolean) {
         corePreferences.appEnabled = enabled
+        appEnabledLiveData.postValue(enabled)
         val defaultExpires = corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
         coreContext.core.accountList.forEach { account ->
             account.params.clone().also { newParams ->

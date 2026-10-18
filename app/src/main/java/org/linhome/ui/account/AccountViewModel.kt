@@ -1,8 +1,9 @@
 /*
  * Copyright (c) 2010-2020 Belledonne Communications SARL.
+ * Modifications Copyright (c) 2026 Adonis Open Contributors.
  *
- * This file is part of linhome-android
- * (see https://www.linhome.org).
+ * This file is part of Adonis Open (fork of linhome-android,
+ * see https://www.linhome.org).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,17 +62,29 @@ class AccountViewModel : ViewModel() {
     }
 
     fun refreshRegisters() {
+        if (!LinhomeApplication.corePreferences.appEnabled) {
+            refreshDescriptions()
+            return
+        }
         account?.refreshRegister()
         pushGw?.refreshRegister()
     }
 
+    fun refreshDescriptions() {
+        accountDesc.value = getDescription("account_info", account)
+        pushGWDesc.value = getDescription("push_account_info", pushGw)
+    }
 
     fun getDescription(key:String, account: org.linphone.core.Account?): String? {
-        return account?.state?.toHumanReadable()?.let {
-            account?.params?.identityAddress?.asStringUriOnly()?.let { it1 ->
-                Texts.get(key, it1,
-                    it
-                )
+        if (account == null) return Texts.get("no_account_configured")
+        val stateText = if (!LinhomeApplication.corePreferences.appEnabled) {
+            Texts.get("registration_state_paused")
+        } else {
+            account.state?.toHumanReadable()
+        }
+        return stateText?.let {
+            account.params?.identityAddress?.asStringUriOnly()?.let { it1 ->
+                Texts.get(key, it1, it)
             }
         } ?: Texts.get("no_account_configured")
     }

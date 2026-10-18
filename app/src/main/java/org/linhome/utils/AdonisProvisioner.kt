@@ -287,7 +287,39 @@ object AdonisProvisioner {
         }
     }
 
-    fun applyConfig(context: Context, config: AdonisConfig, onComplete: ((Boolean, String) -> Unit)? = null) {
+    fun formatSipAddress(rawAddress: String, fallbackDomain: String?): String {
+        var formattedAddress = rawAddress.trim()
+        if (!formattedAddress.startsWith("sip:", ignoreCase = true) && !formattedAddress.startsWith("sips:", ignoreCase = true)) {
+            formattedAddress = "sip:$formattedAddress"
+        }
+        if (!formattedAddress.contains("@")) {
+            val domain = fallbackDomain?.takeIf { it.isNotBlank() }
+                ?: LinhomeAccount.get()?.params?.domain
+                ?: "local"
+            formattedAddress = "$formattedAddress@$domain"
+        }
+        return formattedAddress
+    }
+
+    fun findMatchingExistingDevice(dev: AdonisDeviceConfig, fallbackDomain: String?): Device? {
+        val formattedAddress = formatSipAddress(dev.address, fallbackDomain)
+        DeviceStore.findDeviceByAddress(formattedAddress)?.let { return it }
+        val rawAlt = dev.alternativeAddress?.trim()
+        if (!rawAlt.isNullOrBlank()) {
+            val formattedAlt = formatSipAddress(rawAlt, fallbackDomain)
+            DeviceStore.findDeviceByAddress(formattedAlt)?.let { return it }
+        }
+        return DeviceStore.devices.firstOrNull {
+            it.name.trim().equals(dev.name.trim(), ignoreCase = true)
+        }
+    }
+
+    fun applyConfig(
+        context: Context,
+        config: AdonisConfig,
+        overwriteExistingDevices: Boolean = false,
+        onComplete: ((Boolean, String) -> Unit)? = null
+    ) {
         GlobalScope.launch(Dispatchers.Main) {
             try {
                 // Case 1: Remote XML Provisioning URL
@@ -302,7 +334,7 @@ object AdonisProvisioner {
                     return@launch
                 }
 
-                // Case 2: SIP Account Configuration
+                // Case 2: SIP Account Configuration (always overwrites existing account once approved)
                 var sipConfigured = false
                 config.sip?.let { sip ->
                     Log.i("$TAG Configuring SIP account for ${sip.username}@${sip.domain}")
@@ -338,8 +370,10 @@ object AdonisProvisioner {
 
                     val account = accountCreator.createAccountInCore()
                     if (account != null) {
+                        val callsEnabled = corePreferences.appEnabled
                         account.params.clone().also { newParams ->
-                            newParams.expires = sip.expires
+                            newParams.isRegisterEnabled = callsEnabled
+                            newParams.expires = if (callsEnabled) sip.expires else 0
                             newParams.transport = transportType
                             newParams.pushNotificationAllowed = true
                             if (!sip.proxy.isNullOrBlank()) {
@@ -370,16 +404,18 @@ object AdonisProvisioner {
                     }
                 }
 
-                // Case 3: Device(s) Configuration
-                var devicesCount = 0
+                // Case 3: Device(s) Configuration (additive by default; overwrites only if explicitly approved)
+                var devicesAddedCount = 0
+                var devicesUpdatedCount = 0
+                var devicesSkippedCount = 0
                 for (dev in config.devices) {
-                    var formattedAddress = dev.address.trim()
-                    if (!formattedAddress.startsWith("sip:", ignoreCase = true) && !formattedAddress.startsWith("sips:", ignoreCase = true)) {
-                        formattedAddress = "sip:$formattedAddress"
-                    }
-                    if (!formattedAddress.contains("@")) {
-                        val domain = config.sip?.domain ?: "local"
-                        formattedAddress = "$formattedAddress@$domain"
+                    val formattedAddress = formatSipAddress(dev.address, config.sip?.domain)
+                    val existingDevice = findMatchingExistingDevice(dev, config.sip?.domain)
+
+                    if (existingDevice != null && !overwriteExistingDevices) {
+                        Log.i("$TAG Skipping existing device '${dev.name}' ($formattedAddress) because overwrite was not approved")
+                        devicesSkippedCount++
+                        continue
                     }
 
                     val mappedType = when (dev.type.lowercase().trim()) {
@@ -409,21 +445,15 @@ object AdonisProvisioner {
                         actionsList.add(Action("action_open_door", "#"))
                     }
 
-                    DeviceStore.findDeviceByAddress(formattedAddress)?.let { existing ->
-                        DeviceStore.removeDevice(existing)
+                    if (existingDevice != null) {
+                        DeviceStore.removeDevice(existingDevice)
+                        devicesUpdatedCount++
+                    } else {
+                        devicesAddedCount++
                     }
 
-                    var formattedAltAddress = dev.alternativeAddress?.trim()
-                    if (!formattedAltAddress.isNullOrBlank()) {
-                        if (!formattedAltAddress.startsWith("sip:") && !formattedAltAddress.startsWith("sips:")) {
-                            formattedAltAddress = "sip:$formattedAltAddress"
-                        }
-                        if (!formattedAltAddress.contains("@")) {
-                            val domain = config.sip?.domain ?: "local"
-                            formattedAltAddress = "$formattedAltAddress@$domain"
-                        }
-                    } else {
-                        formattedAltAddress = null
+                    val formattedAltAddress = dev.alternativeAddress?.trim()?.takeIf { it.isNotBlank() }?.let {
+                        formatSipAddress(it, config.sip?.domain)
                     }
 
                     val newDevice = Device(
@@ -436,18 +466,18 @@ object AdonisProvisioner {
                         formattedAltAddress
                     )
                     DeviceStore.persistDevice(newDevice)
-                    devicesCount++
                 }
 
-                if (devicesCount > 0) {
+                val totalChangedDevices = devicesAddedCount + devicesUpdatedCount
+                if (totalChangedDevices > 0) {
                     DeviceStore.saveLocalDevices()
                     DeviceStore.readDevicesFromFriends()
                     DeviceStore.mutableDevices?.postValue(DeviceStore.devices)
                 }
 
-                val successMsg = Texts.get("adonis_autoconfig_success", devicesCount.toString())
+                val successMsg = Texts.get("adonis_autoconfig_success", totalChangedDevices.toString())
                 Toast.makeText(context, successMsg, Toast.LENGTH_LONG).show()
-                Log.i("$TAG Auto-configuration applied successfully (sip: $sipConfigured, devices: $devicesCount)")
+                Log.i("$TAG Auto-configuration applied successfully (sip: $sipConfigured, added: $devicesAddedCount, updated: $devicesUpdatedCount, skipped: $devicesSkippedCount)")
                 onComplete?.invoke(true, successMsg)
 
             } catch (e: Exception) {
@@ -462,7 +492,7 @@ object AdonisProvisioner {
     fun provisionFromRaw(raw: String, context: Context, onComplete: ((Boolean, String) -> Unit)? = null): Boolean {
         val cfg = parse(raw)
         return if (cfg != null) {
-            applyConfig(context, cfg, onComplete)
+            applyConfig(context, cfg, overwriteExistingDevices = false, onComplete = onComplete)
             true
         } else {
             false

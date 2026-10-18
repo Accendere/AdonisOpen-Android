@@ -168,7 +168,18 @@ class MainActivity : GenericActivity() {
         binding.appbar.toolbarBackButton.setOnClickListener {
             onToolbarBackButtonClicked()
         }
+        binding.appbar.toolbarCallsToggle.setOnClickListener {
+            Compatibility.vibrateActionFeedback()
+            val nextState = !LinhomeApplication.corePreferences.appEnabled
+            LinhomeAccount.setAppEnabled(nextState)
+            updateToolbarCallsToggle()
+        }
+        LinhomeAccount.appEnabledLiveData.observe(this) {
+            updateToolbarCallsToggle()
+        }
+        updateToolbarCallsToggle()
 
+        LinhomeApplication.coreContext.closeAppUponCallFinish = false
         val isAdonisIntent = intent?.data?.scheme.equals("adonis", ignoreCase = true)
         if (isAdonisIntent) {
             LinhomeApplication.coreContext.closeAppUponCallFinish = false
@@ -210,6 +221,11 @@ class MainActivity : GenericActivity() {
         }
     }
 
+    fun promptAdonisAutoConfig(config: org.linhome.utils.AdonisConfig) {
+        pendingAdonisConfig = config
+        showPendingAutoConfigDialogIfNeeded()
+    }
+
     private fun showPendingAutoConfigDialogIfNeeded() {
         if (isFinishing || isDestroyed) return
         val config = pendingAdonisConfig ?: return
@@ -228,12 +244,21 @@ class MainActivity : GenericActivity() {
 
         // Populate SIP details
         val sipCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.sip_card)
+        val sipOverwriteWarning = dialogView.findViewById<android.widget.TextView>(R.id.sip_overwrite_warning)
         if (config.sip != null) {
             sipCard.visibility = View.VISIBLE
             dialogView.findViewById<android.widget.TextView>(R.id.sip_username_text).text = config.sip.username
             val domainDisplay = if (!config.sip.proxy.isNullOrBlank()) "${config.sip.domain} (via ${config.sip.proxy})" else config.sip.domain
             dialogView.findViewById<android.widget.TextView>(R.id.sip_domain_text).text = domainDisplay
             dialogView.findViewById<android.widget.TextView>(R.id.sip_transport_text).text = (config.sip.transport ?: "UDP").uppercase()
+            val existingAccount = LinhomeAccount.get()
+            if (existingAccount != null) {
+                val existingIdentity = existingAccount.params?.identityAddress?.asStringUriOnly() ?: "configured account"
+                sipOverwriteWarning.text = "⚠ Will overwrite existing SIP account ($existingIdentity)"
+                sipOverwriteWarning.visibility = View.VISIBLE
+            } else {
+                sipOverwriteWarning.visibility = View.GONE
+            }
         } else {
             sipCard.visibility = View.GONE
         }
@@ -251,30 +276,47 @@ class MainActivity : GenericActivity() {
             remoteUrlCard.visibility = View.GONE
         }
 
-        // Populate Devices details
+        // Populate Devices details (additive by default; overwrites require explicit approval)
         val devicesCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.devices_card)
         val devicesListLayout = dialogView.findViewById<android.widget.LinearLayout>(R.id.devices_list_layout)
         val devicesHeader = dialogView.findViewById<android.widget.TextView>(R.id.devices_header_title)
+        val devicesAdditiveNote = dialogView.findViewById<android.widget.TextView>(R.id.devices_additive_note)
+        val checkboxOverwriteDevices = dialogView.findViewById<android.widget.CheckBox>(R.id.checkbox_overwrite_devices)
+        val applyButton = dialogView.findViewById<android.widget.Button>(R.id.btn_apply)
+
+        var newDeviceCount = 0
+        var existingConflictCount = 0
 
         if (config.devices.isNotEmpty()) {
             devicesCard.visibility = View.VISIBLE
-            devicesHeader.text = "DEVICES TO ADD (${config.devices.size})"
             devicesListLayout.removeAllViews()
 
             for (dev in config.devices) {
+                val existingMatch = org.linhome.utils.AdonisProvisioner.findMatchingExistingDevice(dev, config.sip?.domain)
+                if (existingMatch != null) {
+                    existingConflictCount++
+                } else {
+                    newDeviceCount++
+                }
+
                 val row = android.widget.LinearLayout(this).apply {
                     orientation = android.widget.LinearLayout.VERTICAL
                     setPadding(0, 4, 0, 8)
                 }
+                val badgeText = if (existingMatch != null) " [EXISTS — OVERWRITE?]" else " [NEW]"
                 val nameView = android.widget.TextView(this).apply {
-                    text = "• ${dev.name}"
+                    text = "• ${dev.name}$badgeText"
                     textSize = 14f
-                    setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_b))
+                    setTextColor(
+                        if (existingMatch != null) android.graphics.Color.parseColor("#D97706")
+                        else androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_b)
+                    )
                     setTypeface(null, android.graphics.Typeface.BOLD)
                 }
                 val addrView = android.widget.TextView(this).apply {
                     val actStr = dev.actions.joinToString(", ") { "${it.type.replace("action_type_", "").replace("action_", "").replace("_", " ")}: ${it.code}" }
-                    text = "   ${dev.address}  |  $actStr"
+                    val conflictNote = if (existingMatch != null) "\n   Matches existing '${existingMatch.name}' (${existingMatch.address})" else ""
+                    text = "   ${dev.address}  |  $actStr$conflictNote"
                     textSize = 12f
                     setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_g))
                 }
@@ -282,9 +324,37 @@ class MainActivity : GenericActivity() {
                 row.addView(addrView)
                 devicesListLayout.addView(row)
             }
+
+            if (existingConflictCount > 0) {
+                devicesHeader.text = "DEVICES ($newDeviceCount NEW, $existingConflictCount EXISTING)"
+                devicesAdditiveNote.text = "New devices are added automatically. Existing matching devices will be kept untouched unless you approve overwriting them below."
+                checkboxOverwriteDevices.visibility = View.VISIBLE
+                checkboxOverwriteDevices.isChecked = false
+                checkboxOverwriteDevices.text = "Approve overwriting $existingConflictCount existing device(s)"
+            } else {
+                devicesHeader.text = "DEVICES TO ADD ($newDeviceCount NEW)"
+                devicesAdditiveNote.text = "New devices will be added to your existing list."
+                checkboxOverwriteDevices.visibility = View.GONE
+                checkboxOverwriteDevices.isChecked = false
+            }
         } else {
             devicesCard.visibility = View.GONE
+            checkboxOverwriteDevices.visibility = View.GONE
+            checkboxOverwriteDevices.isChecked = false
         }
+
+        fun updateApplyButtonState() {
+            val hasAnythingToApply = config.sip != null ||
+                !config.remoteProvisioningUrl.isNullOrBlank() ||
+                newDeviceCount > 0 ||
+                (existingConflictCount > 0 && checkboxOverwriteDevices.isChecked)
+            applyButton.isEnabled = hasAnythingToApply
+            applyButton.alpha = if (hasAnythingToApply) 1.0f else 0.5f
+        }
+        checkboxOverwriteDevices.setOnCheckedChangeListener { _, _ ->
+            updateApplyButtonState()
+        }
+        updateApplyButtonState()
 
         dialogView.findViewById<android.widget.Button>(R.id.btn_cancel).setOnClickListener {
             dialog.dismiss()
@@ -299,12 +369,17 @@ class MainActivity : GenericActivity() {
             }
         }
 
-        dialogView.findViewById<android.widget.Button>(R.id.btn_apply).setOnClickListener {
+        applyButton.setOnClickListener {
+            val approveDeviceOverwrites = checkboxOverwriteDevices.isChecked
             dialog.dismiss()
             val configToApply = pendingAdonisConfig ?: config
             pendingAdonisConfig = null
             intent?.data = null
-            org.linhome.utils.AdonisProvisioner.applyConfig(this, configToApply) { success, _ ->
+            org.linhome.utils.AdonisProvisioner.applyConfig(
+                this,
+                configToApply,
+                overwriteExistingDevices = approveDeviceOverwrites
+            ) { success, _ ->
                 if (success) {
                     try {
                         if (navController.currentDestination?.id != R.id.navigation_devices) {
@@ -335,6 +410,7 @@ class MainActivity : GenericActivity() {
         toolbarViewModel.leftButtonVisible.value = false
         toolbarViewModel.rightButtonVisible.value = false
         binding.appbar.contentmain.tabbar.visibility = View.GONE
+        updateToolbarCallsToggle()
     }
 
     private fun enterRootFragment() {
@@ -343,6 +419,44 @@ class MainActivity : GenericActivity() {
         toolbarViewModel.burgerButtonVisible.value = true
         toolbarViewModel.leftButtonVisible.value = false
         toolbarViewModel.rightButtonVisible.value = false
+        updateToolbarCallsToggle()
+    }
+
+    fun updateToolbarCallsToggle() {
+        val isDevicesScreen = navController.currentDestination?.id == R.id.navigation_devices && !sideMenuOpened()
+        binding.appbar.toolbarCallsToggle.visibility = if (isDevicesScreen) View.VISIBLE else View.GONE
+        if (!isDevicesScreen) return
+
+        val enabled = LinhomeApplication.corePreferences.appEnabled
+        val density = resources.displayMetrics.density
+
+        // Colored pill background (Emerald green when active, Crimson red when paused)
+        val pillBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 17f * density
+            setColor(Theme.getColor(if (enabled) "color_k" else "color_e"))
+        }
+        binding.appbar.toolbarCallsToggle.background = pillBg
+
+        // Semi-transparent white track background
+        val trackBg = android.graphics.drawable.GradientDrawable().apply {
+            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+            cornerRadius = 10f * density
+            setColor(android.graphics.Color.parseColor("#40FFFFFF"))
+        }
+        binding.appbar.toolbarCallsToggleTrack.background = trackBg
+
+        // Thumb position (END when ON, START when OFF)
+        val thumbParams = binding.appbar.toolbarCallsToggleThumb.layoutParams as? android.widget.FrameLayout.LayoutParams
+        if (thumbParams != null) {
+            thumbParams.gravity = (if (enabled) android.view.Gravity.END else android.view.Gravity.START) or android.view.Gravity.CENTER_VERTICAL
+            binding.appbar.toolbarCallsToggleThumb.layoutParams = thumbParams
+        }
+
+        // Status text
+        binding.appbar.toolbarCallsToggleLabel.text =
+            Texts.get(if (enabled) "toolbar_calls_active" else "toolbar_calls_paused")
+                ?: if (enabled) "Calls ON" else "Paused"
     }
 
     fun pauseNavigation() {
@@ -368,6 +482,7 @@ class MainActivity : GenericActivity() {
         } else {
             styleTabSelection(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
         }
+        updateToolbarCallsToggle()
         applyCommonTheme()
     }
 
@@ -592,6 +707,7 @@ class MainActivity : GenericActivity() {
             finish()
             return
         }
+        updateToolbarCallsToggle()
         showPendingAutoConfigDialogIfNeeded()
     }
 

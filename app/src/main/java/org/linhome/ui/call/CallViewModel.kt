@@ -24,7 +24,6 @@ package org.linhome.ui.call
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import com.google.android.gms.common.images.Size
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
@@ -42,6 +41,7 @@ import org.linhome.linphonecore.extensions.*
 import org.linhome.store.DeviceStore
 import org.linhome.utils.ContactsHelper
 import org.linhome.utils.DialogUtil
+import org.linhome.utils.Size
 import org.linhome.utils.extensions.existsAndIsNotEmpty
 import org.linhome.utils.getImageDimension
 import org.linphone.core.AudioDevice

@@ -1,8 +1,9 @@
 /*
  * Copyright (c) 2010-2020 Belledonne Communications SARL.
+ * Modifications Copyright (c) 2026 Adonis Open Contributors.
  *
- * This file is part of linhome-android
- * (see https://www.linhome.org).
+ * This file is part of Adonis Open (fork of linhome-android,
+ * see https://www.linhome.org).
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,6 +21,7 @@
 
 package org.linhome.ui.assistant.remote
 
+import android.content.DialogInterface
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -29,6 +31,7 @@ import androidx.lifecycle.ViewModelProvider
 import org.linhome.GenericFragment
 import org.linhome.R
 import org.linhome.databinding.FragmentAssistantRemoteUrlBinding
+import org.linhome.entities.LinhomeAccount
 import org.linhome.ui.validators.ValidatorFactory
 import org.linhome.utils.DialogUtil
 import org.linphone.core.ConfiguringState
@@ -51,10 +54,26 @@ class RemoteUrlAccountFragment : GenericFragment() {
         binding.apply.setOnClickListener {
             binding.url.validate()
             if (model.valid()) {
-                binding.apply.isEnabled = false
-                hideKeyboard()
-                showProgress()
-                model.startRemoteProvisionning()
+                val applyNow = {
+                    binding.apply.isEnabled = false
+                    hideKeyboard()
+                    showProgress()
+                    if (LinhomeAccount.configured()) {
+                        LinhomeAccount.disconnect(deletePushAccount = true)
+                    }
+                    model.startRemoteProvisionning()
+                }
+                if (LinhomeAccount.configured()) {
+                    DialogUtil.confirm(
+                        "assistant_using_will_disconnect_title",
+                        "assistant_using_will_disconnect_message",
+                        { _: DialogInterface, _: Int ->
+                            applyNow()
+                        }
+                    )
+                } else {
+                    applyNow()
+                }
             }
         }
 

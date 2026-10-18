@@ -90,6 +90,9 @@ class SideMenuFragment : Fragment() {
         binding.toggleAppEnabled.root.background =
             Theme.selectionEffectAsStateListDrawable("sidemenu_option")
         updateAppToggleUi()
+        LinhomeAccount.appEnabledLiveData.observe(viewLifecycleOwner) {
+            updateAppToggleUi()
+        }
         binding.toggleAppEnabled.root.setOnClickListener {
             val nextState = !org.linhome.LinhomeApplication.corePreferences.appEnabled
             LinhomeAccount.setAppEnabled(nextState)

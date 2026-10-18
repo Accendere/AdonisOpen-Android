@@ -5,3 +5,10 @@ build
 builds
 app/src/main/assets/linhome.zip
 app/build
+
+# Signing material: never commit keystores or their credentials
+keystore.properties
+*.keystore
+*.jks
+*.p12
+google-services.json

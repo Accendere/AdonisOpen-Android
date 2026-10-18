@@ -143,6 +143,7 @@ data class Device(
         if (LinhomeApplication.coreContext.core.callsNb > 0) {
             return
         }
+        LinhomeApplication.coreContext.closeAppUponCallFinish = false
         val params: CallParams? = LinhomeApplication.coreContext.core.createCallParams(null)
         type?.also {
             params?.isVideoEnabled = DeviceTypes.supportsVideo(it)

@@ -25,10 +25,10 @@ import android.content.res.Resources
 import android.os.Bundle
 import android.view.View
 import android.view.WindowManager
-import com.google.android.gms.common.images.Size
 import org.linhome.GenericActivity
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.customisation.Theme
+import org.linhome.utils.Size
 import org.linphone.core.Call
 import org.linphone.core.tools.Log
 
@@ -54,10 +54,10 @@ abstract class CallGenericActivity : GenericActivity() {
             coreContext.core.calls.filter { it.callLog.callId.equals(callId) }.firstOrNull()
         }
         // Fallback: if call not found by callId (can happen with notification full-screen intent
-        // on Android 14+ due to timing), use the current call
+        // on Android 14+ or during OutgoingInit before SIP Call-ID is assigned), use currentCall or first active call
         if (call == null) {
-            Log.w("[CallGenericActivity] Call not found by callId, falling back to currentCall")
-            call = coreContext.core.currentCall
+            Log.w("[CallGenericActivity] Call not found by callId, falling back to currentCall / first call")
+            call = coreContext.core.currentCall ?: coreContext.core.calls.firstOrNull()
         }
         if (call == null) {
             Log.w("[CallGenericActivity] No active call found, finishing")
