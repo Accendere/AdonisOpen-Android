@@ -38,7 +38,7 @@
             src='@{"icons/chevron_down"}'
             android:layout_alignParentEnd="true"
             android:layout_marginTop="20dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginEnd="24dp"
             android:onClick="@{() -> settingsSpinner.performClick()}"
             >
         </ImageView>
@@ -50,9 +50,9 @@
             android:text="@{title}"
             android:enabled="@{enabled ?? true}"
             android:visibility="@{title.length() > 0 ? View.VISIBLE : View.GONE}"
-            android:layout_marginTop="15dp"
-            android:layout_marginStart="30dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
             style='@{"settings_title"}'
 
             />
@@ -66,8 +66,9 @@
             android:visibility="@{subtitle.length() > 0 ? View.VISIBLE : View.GONE}"
             android:singleLine="true"
             android:layout_below="@id/settings_title"
-            android:layout_marginStart="30dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginTop="3dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
             app:marquee='@{true}'
             style='@{"settings_subtitle"}'
             />
@@ -76,15 +77,15 @@
             android:id="@+id/settings_spinner"
             android:entries="@{labels}"
             popupBackgoundColor='@{"color_d"}'
-            popupBackgoundRadius='@{7.0f}'
+            popupBackgoundRadius='@{12.0f}'
             selectedIndex="@{selectedIndex}"
             settingListener="@{listener}"
             android:enabled="@{enabled ?? true}"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_below="@id/settings_subtitle"
-            android:layout_marginStart="30dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
             android:background="@null"
             />
 
@@ -92,7 +93,9 @@
 
 
         <LinearLayout
-            android:layout_marginTop="15dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_below="@id/settings_spinner"

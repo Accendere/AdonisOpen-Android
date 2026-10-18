@@ -93,6 +93,14 @@ object Theme {
         if (key == "transparent")
             return Color.TRANSPARENT
 
+        val activeTheme = if (LinhomeApplication.contextExists()) {
+            LinhomeApplication.corePreferences.appTheme
+        } else {
+            "orange"
+        }
+        themeConfig.getString("colors.$activeTheme", key, null)?.let { color ->
+            return Color.parseColor(color)
+        }
         themeConfig.getString("colors", key, null)?.let { color ->
             return Color.parseColor(color)
         }
@@ -124,17 +132,20 @@ object Theme {
         clearCache: Boolean = false
     ) { // Preferred SVG, fallback PNG or full name.
         val svg = File(LinhomeApplication.instance.filesDir, "images/$imageName.svg")
-        val signature = if (clearCache) ObjectKey(Date()) else "cache"
-        if (svg.exists())
-            glidesvg.load(svg).signature(ObjectKey(signature)).into(imageView)
-        else {
+        if (svg.exists()) {
+            val sig = if (clearCache) Date().time.toString() else "${Customisation.currentZipMd5}_${svg.lastModified()}_${svg.length()}"
+            glidesvg.load(svg).signature(ObjectKey(sig)).into(imageView)
+        } else {
             val png = File(LinhomeApplication.instance.filesDir, "images/$imageName.png")
-            if (png.exists())
-                glidegeneric.load(png).into(imageView)
-            else {
+            if (png.exists()) {
+                val sig = if (clearCache) Date().time.toString() else "${Customisation.currentZipMd5}_${png.lastModified()}_${png.length()}"
+                glidegeneric.load(png).signature(ObjectKey(sig)).into(imageView)
+            } else {
                 val plain = File(LinhomeApplication.instance.filesDir, "images/$imageName")
-                if (plain.exists())
-                    glidegeneric.load(png).into(imageView)
+                if (plain.exists()) {
+                    val sig = if (clearCache) Date().time.toString() else "${Customisation.currentZipMd5}_${plain.lastModified()}_${plain.length()}"
+                    glidegeneric.load(plain).signature(ObjectKey(sig)).into(imageView)
+                }
             }
         }
     }
@@ -248,7 +259,11 @@ object Theme {
                 "user_input_corner_radius",
                 0.0f
             ) else 0.0f
-            textView.background = roundRectGradientDrawable(color, radius)
+            textView.background = if (editable) {
+                roundRectGradientDrawableWithStroke(color, radius, getColor("color_h"), pxFromDp(1))
+            } else {
+                roundRectGradientDrawable(color, radius)
+            }
         }
         textView.isAllCaps = themeConfig.getBool(section, "allcaps", false)
         themeConfig.getString("textview-style.$textViewKey", "size", null)?.let {

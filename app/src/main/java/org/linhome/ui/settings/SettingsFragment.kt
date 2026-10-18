@@ -65,6 +65,13 @@ class SettingsFragment : GenericFragment() {
         binding.model = settingsViewModel
         binding.view = this
         binding.lifecycleOwner = this
+        settingsViewModel.themeChangedEvent.observe(viewLifecycleOwner, Observer { changed ->
+            if (changed) {
+                settingsViewModel.themeChangedEvent.value = false
+                mainactivity.applyTheme()
+                mainactivity.recreate()
+            }
+        })
         return binding.root
     }
 

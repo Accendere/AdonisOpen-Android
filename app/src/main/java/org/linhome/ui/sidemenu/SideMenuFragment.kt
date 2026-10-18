@@ -63,13 +63,37 @@ class SideMenuFragment : Fragment() {
 
         binding.disconnect.label.text = Texts.get(sideMenuViewModel.sideMenuDisconnectOption.textKey)
         Theme.setIcon(sideMenuViewModel.sideMenuDisconnectOption.iconFile, binding.disconnect.icon)
+        binding.disconnect.icon.imageTintList = Theme.buildSingleColorStateList("color_e")
         binding.disconnect.topSeparator.setBackgroundColor(Theme.getColor("color_h"))
         binding.disconnect.topSeparator.visibility = View.VISIBLE
         binding.disconnect.bottomSeparator.visibility = View.GONE
 
         binding.disconnect.root.background =
             Theme.selectionEffectAsStateListDrawable("sidemenu_option")
-        binding.root.setBackgroundColor(Theme.getColor("color_b"))
+        binding.root.setBackgroundColor(Theme.getColor("color_c"))
+
+        fun updateAppToggleUi() {
+            val enabled = org.linhome.LinhomeApplication.corePreferences.appEnabled
+            binding.toggleAppEnabled.label.text =
+                Texts.get(if (enabled) "menu_app_enabled" else "menu_app_disabled")
+            Theme.setIcon(
+                if (enabled) "icons/eye" else "icons/cancel",
+                binding.toggleAppEnabled.icon
+            )
+            binding.toggleAppEnabled.icon.imageTintList =
+                Theme.buildSingleColorStateList(if (enabled) "color_k" else "color_g")
+        }
+        binding.toggleAppEnabled.topSeparator.setBackgroundColor(Theme.getColor("color_h"))
+        binding.toggleAppEnabled.topSeparator.visibility = View.VISIBLE
+        binding.toggleAppEnabled.bottomSeparator.visibility = View.GONE
+        binding.toggleAppEnabled.root.background =
+            Theme.selectionEffectAsStateListDrawable("sidemenu_option")
+        updateAppToggleUi()
+        binding.toggleAppEnabled.root.setOnClickListener {
+            val nextState = !org.linhome.LinhomeApplication.corePreferences.appEnabled
+            LinhomeAccount.setAppEnabled(nextState)
+            updateAppToggleUi()
+        }
 
         binding.disconnect.root.setOnClickListener {
             DialogUtil.confirm(
@@ -78,7 +102,7 @@ class SideMenuFragment : Fragment() {
                 { _: DialogInterface, _: Int ->
                     LinhomeAccount.disconnect()
                     getMainActivity().navControllerSideMenu.navigateUp()
-                    getMainActivity().navController.navigate(R.id.navigation_assistant_root)
+                    getMainActivity().navController.navigate(R.id.navigation_account)
                 })
         }
 

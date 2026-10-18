@@ -44,7 +44,7 @@
             android:onCheckedChanged="@{(switch, value) -> listener.onBoolValueChanged(value)}"
             android:layout_centerVertical="true"
             android:layout_alignParentEnd="true"
-            android:layout_marginStart="30dp"
+            android:layout_marginStart="16dp"
             android:layout_marginEnd="20dp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content" />
@@ -57,9 +57,9 @@
             android:enabled="@{enabled ?? true}"
             android:visibility="@{title.length() > 0 ? View.VISIBLE : View.GONE}"
             android:layout_toStartOf="@id/setting_switch"
-            android:layout_marginTop="15dp"
-            android:layout_marginStart="30dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="16dp"
             style='@{"settings_title"}'
             />
 
@@ -73,8 +73,9 @@
             android:singleLine="true"
             android:layout_below="@id/settings_title"
             android:layout_toStartOf="@id/setting_switch"
-            android:layout_marginStart="30dp"
-            android:layout_marginEnd="30dp"
+            android:layout_marginTop="3dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="16dp"
             style='@{"settings_subtitle"}'
             app:marquee='@{true}'
 
@@ -82,7 +83,9 @@
 
 
         <LinearLayout
-            android:layout_marginTop="15dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginStart="24dp"
+            android:layout_marginEnd="24dp"
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:layout_below="@id/settings_subtitle"

@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/list_item"
     android:layout_width="match_parent"
-    android:layout_height="55dp"
+    android:layout_height="58dp"
     android:clickable="true"
     android:gravity="center_vertical"
     android:focusable="true">
@@ -11,24 +11,26 @@
     <View
         android:id="@+id/top_separator"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
+        android:layout_height="0.5dp"
         android:visibility="gone"
         app:layout_constraintBottom_toTopOf="parent" />
 
     <ImageView
         android:id="@+id/icon"
-        android:layout_width="30dp"
-        android:layout_marginStart="20dp"
-        android:layout_height="match_parent"
+        android:layout_width="24dp"
+        android:layout_marginStart="22dp"
+        android:layout_height="24dp"
         android:src="@drawable/ic_linhome_icon"
-        app:layout_constraintStart_toStartOf="parent"
-        tools:layout_editor_absoluteY="0dp" />
+        tint='@{"color_a"}'
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/label"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:layout_marginStart="15dp"
+        android:layout_marginStart="16dp"
         android:gravity="center_vertical"
         android:layout_centerVertical="true"
         style='@{"sidemenu_option"}'
@@ -38,7 +40,7 @@
     <View
         android:id="@+id/bottom_separator"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
+        android:layout_height="0.5dp"
         app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

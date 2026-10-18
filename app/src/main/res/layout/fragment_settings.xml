@@ -24,6 +24,51 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <include
+            layout="@layout/settings_widget_spinner"
+            title='@{model.getText("settings_theme_title")}'
+            listener="@{model.themeListener}"
+            selectedIndex="@{model.themeIndex}"
+            labels="@{model.themeLabels}"/>
+
+        <include
+            layout="@layout/settings_widget_switch"
+            title='@{model.getText("settings_app_enabled")}'
+            listener="@{model.appEnabledListener}"
+            checked="@={model.appEnabled}"/>
+
+        <include
+            layout="@layout/settings_widget_switch"
+            title='@{model.getText("settings_save_call_videos")}'
+            listener="@{model.saveCallVideosListener}"
+            checked="@={model.saveCallVideos}"/>
+
+        <include
+            layout="@layout/settings_widget_spinner"
+            title='@{model.getText("settings_history_retention")}'
+            listener="@{model.retentionListener}"
+            selectedIndex="@{model.retentionIndex}"
+            labels="@{model.retentionLabels}"/>
+
+        <include
+            layout="@layout/settings_widget_switch"
+            title='@{model.getText("settings_notify_answered_elsewhere")}'
+            listener="@{model.notifyAnsweredElsewhereListener}"
+            checked="@={model.notifyAnsweredElsewhere}"/>
+
+        <include
+            layout="@layout/settings_widget_switch"
+            title='@{model.getText("settings_auto_close_timer_enabled")}'
+            listener="@{model.autoCloseTimerEnabledListener}"
+            checked="@={model.autoCloseTimerEnabled}"/>
+
+        <include
+            layout="@layout/settings_widget_spinner"
+            title='@{model.getText("settings_auto_close_timer_duration")}'
+            listener="@{model.autoCloseDurationListener}"
+            selectedIndex="@{model.autoCloseDurationIndex}"
+            labels="@{model.autoCloseDurationLabels}"/>
+
         <org.linhome.ui.widgets.LExpandableSettingsSection
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

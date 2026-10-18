@@ -43,6 +43,7 @@ object Customisation {
     var deviceTypesConfig: Config
     var actionTypesConfig: Config
     var actionsMethodTypesConfig: Config
+    var currentZipMd5: String = "v2"
 
 
     init {
@@ -68,19 +69,21 @@ object Customisation {
 
     private fun unzipBrandFromAssets(context: Context) {
         try {
-            val zipInputStream = context.assets.open(zipbrand)
-            val zipmd5 = String(Hex.encodeHex(DigestUtils.md5(zipInputStream)))
+            val md5Stream = context.assets.open(zipbrand)
+            val zipmd5 = String(Hex.encodeHex(DigestUtils.md5(md5Stream)))
+            md5Stream.close()
+            currentZipMd5 = zipmd5
             if (zipmd5 == context.getSharedPreferences(
                     context.getString(R.string.app_name),
                     Context.MODE_PRIVATE
                 ).getString(context.getString(R.string.zip_md5), null)
             ) {
                 android.util.Log.i("", "[Customisation] md5 identical - custo has not changed.")
-                zipInputStream.close()
                 return
             }
+            val unzipStream = context.assets.open(zipbrand)
             if (zip.unzipInputStream(
-                    zipInputStream,
+                    unzipStream,
                     LinhomeApplication.instance.filesDir.absolutePath
                 )
             )
@@ -89,7 +92,7 @@ object Customisation {
                     Context.MODE_PRIVATE
                 ).edit().putString(context.getString(R.string.zip_md5), zipmd5).apply()
         } catch (e: Exception) {
-            android.util.Log.e("", "[Customisation] Failed unzipping zip from assets : $e")
+            android.util.Log.e("", "[Customisation] Failed unzipping zip from assets : $e")
             e.printStackTrace()
             return
         }

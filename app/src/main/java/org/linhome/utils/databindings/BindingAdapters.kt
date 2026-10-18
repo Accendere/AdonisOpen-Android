@@ -86,9 +86,11 @@ fun bounce(view: View, bounceTrigger: Boolean) {
 @BindingAdapter("roundRectInput")
 fun roundrectbackground(view: ViewGroup, enabled: Boolean) {
     if (enabled)
-        view.background = Theme.roundRectInputBackgroundWithColorKeyAndRadius(
-            "color_c",
-            "user_input_corner_radius"
+        view.background = Theme.roundRectInputBackgroundWithColorKeyAndRadiusAndStroke(
+            "color_d",
+            "user_input_corner_radius",
+            "color_h",
+            1
         )
 }
 

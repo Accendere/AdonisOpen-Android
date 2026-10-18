@@ -35,7 +35,7 @@ object zip {
         }
         try {
             val targetDir = File(folderName)
-            zipInputStream.reset()
+            try { zipInputStream.reset() } catch (_: Exception) {}
             val zin = ZipInputStream(zipInputStream)
             var ze: ZipEntry?
             while (zin.nextEntry.also { ze = it } != null) {

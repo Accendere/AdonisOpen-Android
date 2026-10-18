@@ -18,12 +18,14 @@
 
         <com.google.android.material.appbar.AppBarLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            app:elevation="0dp"
+            android:elevation="0dp">
 
             <androidx.appcompat.widget.Toolbar
                 android:id="@+id/toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="?attr/actionBarSize"
+                android:layout_height="60dp"
                 android:contentInsetStart="0dp"
                 android:contentInsetLeft="0dp"
                 app:contentInsetLeft="0dp"
@@ -37,41 +39,47 @@
 
                     <ImageButton
                         android:id="@+id/toolbar_burger_button"
-                        android:layout_width="43dp"
-                        android:layout_height="match_parent"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
                         android:padding="10dp"
                         android:scaleType="centerInside"
-                        android:layout_marginStart="9dp"
+                        android:layout_marginStart="10dp"
                         android:src="@drawable/ic_linhome_icon"
-                        android:background="@color/transparent"
+                        android:background="?attr/selectableItemBackgroundBorderless"
                         android:layout_centerVertical="true"
                         android:layout_alignParentStart="true"
                         android:visibility='@{toolbarviewmodel1.visibility(toolbarviewmodel1.burgerButtonVisible)}'
-                        selection_effect='@{"primary_color"}'
+                        tint='@{"color_b"}'
                         src='@{"icons/burger_menu"}'/>
 
                     <ImageButton
                         android:id="@+id/toolbar_back_button"
-                        android:layout_width="43dp"
-                        android:layout_height="match_parent"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
                         android:padding="10dp"
                         android:scaleType="centerInside"
-                        android:layout_marginStart="9dp"
+                        android:layout_marginStart="10dp"
                         android:layout_centerVertical="true"
                         android:src="@drawable/ic_linhome_icon"
-                        android:background="@color/transparent"
+                        android:background="?attr/selectableItemBackgroundBorderless"
                         android:visibility='@{toolbarviewmodel1.visibility(toolbarviewmodel1.backButtonVisible)}'
                         android:layout_alignParentStart="true"
-                        selection_effect='@{"primary_color"}'
+                        tint='@{"color_b"}'
                         src='@{"icons/back"}'/>
 
                     <RelativeLayout
-                        android:layout_width="100dp"
-                        android:paddingTop="10dp"
+                        android:layout_width="wrap_content"
+                        android:minWidth="68dp"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="6dp"
                         android:layout_height="match_parent"
-                        android:layout_marginStart="9dp"
+                        android:layout_marginStart="4dp"
+                        android:layout_toEndOf="@+id/toolbar_burger_button"
+                        android:layout_alignWithParentIfMissing="true"
                         android:id="@+id/toolbar_left_button"
-                        selection_effect='@{"primary_color"}'
+                        android:background="?attr/selectableItemBackgroundBorderless"
                         android:orientation="horizontal"
                         android:layout_centerVertical="true"
                         android:clickable="true"
@@ -80,21 +88,22 @@
                         >
                         <ImageView
                             android:id="@+id/toolbar_left_button_image"
-                            android:layout_width="25dp"
+                            android:layout_width="20dp"
                             android:layout_height="20dp"
                             android:layout_centerHorizontal="true"
                             android:scaleType="centerInside"
                             android:src="@drawable/ic_linhome_icon"
                             android:background="@color/transparent"
+                            tint='@{"color_a"}'
                            />
                         <TextView
-                            android:gravity="bottom"
+                            android:gravity="bottom|center_horizontal"
                             android:id="@+id/toolbar_left_button_title"
-                            android:layout_width="match_parent"
+                            android:layout_width="wrap_content"
+                            android:layout_centerHorizontal="true"
                             android:layout_height="wrap_content"
                             android:layout_alignParentBottom="true"
                             android:layout_below="@+id/toolbar_left_button_image"
-                            android:textColor="@color/color_c"
                             style='@{"toolbar_action"}'
                             />
                     </RelativeLayout>
@@ -110,12 +119,13 @@
 
 
                     <RelativeLayout
-                        android:layout_width="100dp"
-                        android:paddingTop="10dp"
+                        android:layout_width="96dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="6dp"
                         android:layout_height="match_parent"
-                        android:layout_marginStart="9dp"
+                        android:layout_marginEnd="8dp"
                         android:id="@+id/toolbar_right_button"
-                        selection_effect='@{"primary_color"}'
+                        android:background="?attr/selectableItemBackgroundBorderless"
                         android:orientation="horizontal"
                         android:layout_centerVertical="true"
                         android:clickable="true"
@@ -126,12 +136,13 @@
                         >
                         <ImageView
                             android:id="@+id/toolbar_right_button_image"
-                            android:layout_width="25dp"
-                            android:layout_height="20dp"
+                            android:layout_width="22dp"
+                            android:layout_height="22dp"
                             android:scaleType="centerInside"
                             android:src="@drawable/ic_linhome_icon"
                             android:background="@color/transparent"
                             android:layout_centerHorizontal="true"
+                            tint='@{"color_a"}'
                             />
                         <TextView
                             android:gravity="bottom"
@@ -140,7 +151,6 @@
                             android:layout_height="wrap_content"
                             android:layout_alignParentBottom="true"
                             android:layout_below="@+id/toolbar_right_button_image"
-                            android:textColor="@color/color_c"
                             style='@{"toolbar_action"}'
                             />
                     </RelativeLayout>
@@ -149,14 +159,14 @@
 
                     <LinearLayout
                         android:layout_width="match_parent"
-                        android:layout_height="4dp"
+                        android:layout_height="3dp"
                         android:background="@color/transparent"
                         android:layout_alignParentBottom="true"
                         visibility="@{toolbarviewmodel1.activityInprogress ? View.VISIBLE : View.GONE }"
                         >
                         <androidx.core.widget.ContentLoadingProgressBar
                             android:id="@+id/progress"
-                            android:background="@color/cardview_dark_background"
+                            android:background="@color/transparent"
                             android:layout_width="match_parent"
                             android:layout_height="50dp"
                             style="@style/Widget.AppCompat.ProgressBar.Horizontal"
@@ -165,6 +175,12 @@
                             android:visibility="visible"
                             />
                     </LinearLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_alignParentBottom="true"
+                        backgoundcolor='@{"color_h"}' />
 
                 </RelativeLayout>
 

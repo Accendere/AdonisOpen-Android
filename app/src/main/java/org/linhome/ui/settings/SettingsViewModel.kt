@@ -24,6 +24,8 @@ import androidx.databinding.ViewDataBinding
 import androidx.lifecycle.MutableLiveData
 import org.linhome.LinhomeApplication
 import org.linhome.customisation.Texts
+import org.linhome.entities.LinhomeAccount
+import org.linhome.store.HistoryEventStore
 import org.linhome.utils.databindings.ViewModelWithTools
 import org.linphone.core.Core
 import org.linphone.core.CoreListenerStub
@@ -38,6 +40,58 @@ class SettingsViewModel : ViewModelWithTools() {
     val latestSnapshotShown = MutableLiveData(corePref.showLatestSnapshot)
     var backgroundModeEnabled = MutableLiveData(corePref.keepServiceAlive)
 
+    // Fork settings
+    val appEnabled = MutableLiveData(corePref.appEnabled)
+    val saveCallVideos = MutableLiveData(corePref.saveCallVideos)
+    val notifyAnsweredElsewhere = MutableLiveData(corePref.notifyAnsweredElsewhere)
+    val themeChangedEvent = MutableLiveData(false)
+
+    // Theme selector
+    private val themeValues = arrayListOf("orange", "slate", "emerald", "obsidian")
+    val themeIndex = MutableLiveData<Int>()
+    val themeLabels = MutableLiveData<ArrayList<String>>()
+    val themeListener = object : SettingListenerStub() {
+        override fun onListValueChanged(position: Int) {
+            val selectedTheme = themeValues[position]
+            if (corePref.appTheme != selectedTheme) {
+                corePref.appTheme = selectedTheme
+                themeIndex.value = position
+                themeChangedEvent.value = true
+            }
+        }
+    }
+
+    // History retention selector
+    private val retentionValues = arrayListOf(0, 1, 2, 3, 7, 30, 90)
+    val retentionIndex = MutableLiveData<Int>()
+    val retentionLabels = MutableLiveData<ArrayList<String>>()
+    val retentionListener = object : SettingListenerStub() {
+        override fun onListValueChanged(position: Int) {
+            val days = retentionValues[position]
+            corePref.historyRetentionDays = days
+            retentionIndex.value = position
+            HistoryEventStore.pruneOldEvents(days)
+        }
+    }
+
+    // Auto-close preview timer selector
+    val autoCloseTimerEnabled = MutableLiveData(corePref.silentAcceptTimerEnabled)
+    val autoCloseTimerEnabledListener = object : SettingListenerStub() {
+        override fun onBoolValueChanged(newValue: Boolean) {
+            corePref.silentAcceptTimerEnabled = newValue
+        }
+    }
+
+    private val autoCloseDurationValues = arrayListOf(10, 15, 30, 45, 60, 90)
+    val autoCloseDurationIndex = MutableLiveData<Int>()
+    val autoCloseDurationLabels = MutableLiveData<ArrayList<String>>()
+    val autoCloseDurationListener = object : SettingListenerStub() {
+        override fun onListValueChanged(position: Int) {
+            val seconds = autoCloseDurationValues[position]
+            corePref.silentAcceptTimerSeconds = seconds
+            autoCloseDurationIndex.value = position
+        }
+    }
 
     // Logs
     val enableDebugLogs = MutableLiveData(corePref.debugLogs)
@@ -68,6 +122,9 @@ class SettingsViewModel : ViewModelWithTools() {
     init {
         core.addListener(uploadCoreListener)
         initEncryptionList()
+        initThemeList()
+        initRetentionList()
+        initAutoCloseDurationList()
     }
 
     override fun onCleared() {
@@ -87,6 +144,24 @@ class SettingsViewModel : ViewModelWithTools() {
         }
     }
 
+    val appEnabledListener = object : SettingListenerStub() {
+        override fun onBoolValueChanged(newValue: Boolean) {
+            LinhomeAccount.setAppEnabled(newValue)
+        }
+    }
+
+    val saveCallVideosListener = object : SettingListenerStub() {
+        override fun onBoolValueChanged(newValue: Boolean) {
+            corePref.saveCallVideos = newValue
+        }
+    }
+
+    val notifyAnsweredElsewhereListener = object : SettingListenerStub() {
+        override fun onBoolValueChanged(newValue: Boolean) {
+            corePref.notifyAnsweredElsewhere = newValue
+        }
+    }
+
     val enableDebugLogsListener = object : SettingListenerStub() {
         override fun onBoolValueChanged(newValue: Boolean) {
             corePref.debugLogs = newValue
@@ -96,12 +171,37 @@ class SettingsViewModel : ViewModelWithTools() {
     val enableBackgroundMode = object : SettingListenerStub() {
         override fun onBoolValueChanged(newValue: Boolean) {
             corePref.keepServiceAlive = newValue
-            if (newValue) {
+            if (newValue && corePref.appEnabled) {
                 LinhomeApplication.coreContext.notificationsManager.startForeground()
             } else {
                 LinhomeApplication.coreContext.notificationsManager.stopForegroundNotificationIfPossible()
             }
         }
+    }
+
+    private fun initThemeList() {
+        themeLabels.value = arrayListOf(
+            Texts.get("theme_orange"),
+            Texts.get("theme_slate"),
+            Texts.get("theme_emerald"),
+            Texts.get("theme_obsidian")
+        )
+        val idx = themeValues.indexOf(corePref.appTheme)
+        themeIndex.value = if (idx >= 0) idx else 0
+    }
+
+    private fun initRetentionList() {
+        retentionLabels.value = arrayListOf(
+            Texts.get("retention_never"),
+            Texts.get("retention_1_day"),
+            Texts.get("retention_2_days"),
+            Texts.get("retention_3_days"),
+            Texts.get("retention_7_days"),
+            Texts.get("retention_30_days"),
+            Texts.get("retention_90_days")
+        )
+        val idx = retentionValues.indexOf(corePref.historyRetentionDays)
+        retentionIndex.value = if (idx >= 0) idx else retentionValues.indexOf(2)
     }
 
     private fun initEncryptionList() {
@@ -119,5 +219,17 @@ class SettingsViewModel : ViewModelWithTools() {
         encryptionIndex.value = encryptionValues.indexOf(core.mediaEncryption.toInt())
     }
 
+    private fun initAutoCloseDurationList() {
+        autoCloseDurationLabels.value = arrayListOf(
+            "10s",
+            "15s",
+            "30s",
+            "45s",
+            "60s",
+            "90s"
+        )
+        val idx = autoCloseDurationValues.indexOf(corePref.silentAcceptTimerSeconds)
+        autoCloseDurationIndex.value = if (idx >= 0) idx else 2
+    }
 
 }

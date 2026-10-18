@@ -64,6 +64,7 @@ class SideMenuAdapter(private val options: ArrayList<MenuOption>, navController:
         fun bindItems(option: MenuOption) {
             optionLabelTV.text = Texts.get(option.textKey)
             Theme.setIcon(option.iconFile, optionIconIV)
+            optionIconIV.imageTintList = Theme.buildSingleColorStateList("color_a")
             itemView.setOnClickListener {
                 optionsAdapter.navigationController.navigate(option.targetFragmentId)
             }

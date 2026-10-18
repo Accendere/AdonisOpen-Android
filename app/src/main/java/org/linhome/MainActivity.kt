@@ -32,6 +32,7 @@ import android.view.WindowManager
 import androidx.annotation.RequiresApi
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.NavController
@@ -67,6 +68,8 @@ class MainActivity : GenericActivity() {
 
     var toobarButtonClickedListener: ToobarButtonClickedListener? = null
     lateinit var binding: ActivityMainBinding
+    private var pendingAdonisConfig: org.linhome.utils.AdonisConfig? = null
+    private var currentAutoConfigDialog: androidx.appcompat.app.AlertDialog? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,6 +131,11 @@ class MainActivity : GenericActivity() {
         navControllerSideMenu.addOnDestinationChangedListener { _, destination, _ ->
             when (destination.id) {
                 R.id.fragment_sidemenu -> {
+                    val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
+                    val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
+                    if (currentFragment is org.linhome.ui.history.HistoryFragment && currentFragment.isEditing) {
+                        currentFragment.exitEdition()
+                    }
                     enterNonRootFragment()
                     binding.appbar.toolbarTitle.text = null
                 }
@@ -135,6 +143,13 @@ class MainActivity : GenericActivity() {
                     enterRootFragment()
                     binding.appbar.toolbarTitle.text =
                         titleForNavigationFragment(navController.currentDestination?.id)
+                    if (navController.currentDestination?.id == R.id.navigation_history) {
+                        val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
+                        val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
+                        if (currentFragment is org.linhome.ui.history.HistoryFragment) {
+                            currentFragment.updateToolbarButtons()
+                        }
+                    }
                 }
             }
         }
@@ -152,8 +167,16 @@ class MainActivity : GenericActivity() {
             onToolbarBackButtonClicked()
         }
 
-        if (!LinhomeAccount.configured() && (savedInstanceState == null || !savedInstanceState.getBoolean("ignored_no_account"))) {
-            navController.navigate(R.id.navigation_assistant_root)
+        val isAdonisIntent = intent?.data?.scheme.equals("adonis", ignoreCase = true)
+        if (isAdonisIntent) {
+            LinhomeApplication.coreContext.closeAppUponCallFinish = false
+            intent?.data?.let { uri ->
+                pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)
+            }
+        }
+
+        if (!LinhomeAccount.configured() && pendingAdonisConfig == null && (savedInstanceState == null || !savedInstanceState.getBoolean("ignored_no_account"))) {
+            navController.navigate(R.id.navigation_account)
         }
 
         if (savedInstanceState != null && savedInstanceState?.getBoolean("history_opened") == true) {
@@ -177,15 +200,129 @@ class MainActivity : GenericActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent?.data?.scheme.equals("adonis", ignoreCase = true)) {
+            LinhomeApplication.coreContext.closeAppUponCallFinish = false
+            intent?.data?.let { uri ->
+                pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)
+            }
+            showPendingAutoConfigDialogIfNeeded()
+        }
+    }
+
+    private fun showPendingAutoConfigDialogIfNeeded() {
+        if (isFinishing || isDestroyed) return
+        val config = pendingAdonisConfig ?: return
+        if (currentAutoConfigDialog?.isShowing == true) return
+
+        val dialogView = layoutInflater.inflate(R.layout.dialog_adonis_autoconfig, null)
+        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.LindoorDialogTheme)
+            .setView(dialogView)
+            .setCancelable(true)
+            .setOnDismissListener {
+                currentAutoConfigDialog = null
+            }
+            .create()
+
+        currentAutoConfigDialog = dialog
+
+        // Populate SIP details
+        val sipCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.sip_card)
+        if (config.sip != null) {
+            sipCard.visibility = View.VISIBLE
+            dialogView.findViewById<android.widget.TextView>(R.id.sip_username_text).text = config.sip.username
+            val domainDisplay = if (!config.sip.proxy.isNullOrBlank()) "${config.sip.domain} (via ${config.sip.proxy})" else config.sip.domain
+            dialogView.findViewById<android.widget.TextView>(R.id.sip_domain_text).text = domainDisplay
+            dialogView.findViewById<android.widget.TextView>(R.id.sip_transport_text).text = (config.sip.transport ?: "UDP").uppercase()
+        } else {
+            sipCard.visibility = View.GONE
+        }
+
+        // Populate Devices details
+        val devicesCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.devices_card)
+        val devicesListLayout = dialogView.findViewById<android.widget.LinearLayout>(R.id.devices_list_layout)
+        val devicesHeader = dialogView.findViewById<android.widget.TextView>(R.id.devices_header_title)
+
+        if (config.devices.isNotEmpty()) {
+            devicesCard.visibility = View.VISIBLE
+            devicesHeader.text = "DEVICES TO ADD (${config.devices.size})"
+            devicesListLayout.removeAllViews()
+
+            for (dev in config.devices) {
+                val row = android.widget.LinearLayout(this).apply {
+                    orientation = android.widget.LinearLayout.VERTICAL
+                    setPadding(0, 4, 0, 8)
+                }
+                val nameView = android.widget.TextView(this).apply {
+                    text = "• ${dev.name}"
+                    textSize = 14f
+                    setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_b))
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                }
+                val addrView = android.widget.TextView(this).apply {
+                    val actStr = dev.actions.joinToString(", ") { "${it.type.replace("action_type_", "").replace("action_", "").replace("_", " ")}: ${it.code}" }
+                    text = "   ${dev.address}  |  $actStr"
+                    textSize = 12f
+                    setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_g))
+                }
+                row.addView(nameView)
+                row.addView(addrView)
+                devicesListLayout.addView(row)
+            }
+        } else {
+            devicesCard.visibility = View.GONE
+        }
+
+        dialogView.findViewById<android.widget.Button>(R.id.btn_cancel).setOnClickListener {
+            dialog.dismiss()
+            pendingAdonisConfig = null
+            intent?.data = null
+            if (!LinhomeAccount.configured() && navController.currentDestination?.id != R.id.navigation_assistant_root) {
+                try {
+                    navController.navigate(R.id.navigation_assistant_root)
+                } catch (e: Exception) {
+                    Log.e("[MainActivity] Navigation to assistant root failed: $e")
+                }
+            }
+        }
+
+        dialogView.findViewById<android.widget.Button>(R.id.btn_apply).setOnClickListener {
+            dialog.dismiss()
+            val configToApply = pendingAdonisConfig ?: config
+            pendingAdonisConfig = null
+            intent?.data = null
+            org.linhome.utils.AdonisProvisioner.applyConfig(this, configToApply) { success, _ ->
+                if (success) {
+                    try {
+                        if (navController.currentDestination?.id != R.id.navigation_devices) {
+                            navController.popBackStack(R.id.navigation_devices, false)
+                        }
+                        tabBarLayoutClicked(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
+                        enterRootFragment()
+                        org.linhome.store.DeviceStore.mutableDevices?.postValue(org.linhome.store.DeviceStore.devices)
+                    } catch (e: Exception) {
+                        Log.e("[MainActivity] Navigation error after autoconfig: $e")
+                    }
+                }
+            }
+        }
+
+        dialog.show()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putBoolean("ignored_no_account",navController.currentDestination?.id != R.id.navigation_assistant_root)
-        outState.putBoolean("history_opened",navController.currentDestination?.id == R.id.navigation_history)
+        outState.putBoolean("ignored_no_account", navController.currentDestination?.id != R.id.navigation_account)
+        outState.putBoolean("history_opened", navController.currentDestination?.id == R.id.navigation_history)
     }
 
     private fun enterNonRootFragment() {
         toolbarViewModel.backButtonVisible.value = true
         toolbarViewModel.burgerButtonVisible.value = false
+        toolbarViewModel.leftButtonVisible.value = false
+        toolbarViewModel.rightButtonVisible.value = false
         binding.appbar.contentmain.tabbar.visibility = View.GONE
     }
 
@@ -207,12 +344,41 @@ class MainActivity : GenericActivity() {
     }
 
 
-    private fun applyTheme() { //Todo move into bindings when validated
-        binding.drawerLayout.setBackgroundColor(Theme.getColor("color_j"))
-        binding.appbar.toolbar.setBackgroundColor(Theme.getColor("color_a"))
-        binding.appbar.contentmain.tabbar.setBackgroundColor(Theme.getColor("color_j"))
+    fun applyTheme() { //Todo move into bindings when validated
+        binding.drawerLayout.setBackgroundColor(Theme.getColor("color_f"))
+        binding.drawerLayout.setStatusBarBackgroundColor(Theme.getColor("color_c"))
+        binding.appbar.toolbar.setBackgroundColor(Theme.getColor("color_c"))
+        binding.appbar.contentmain.tabbar.setBackgroundColor(Theme.getColor("color_c"))
+        binding.appbar.contentmain.unreadCount.backgroundTintList = Theme.buildSingleColorStateList("color_a")
         binding.appbar.progress.indeterminateTintList = Theme.buildSingleColorStateList("color_a")
-        binding.appbar.progress.setBackgroundColor(Theme.getColor("color_j"))
+        binding.appbar.progress.setBackgroundColor(Theme.getColor("color_i"))
+        if (binding.appbar.contentmain.tabbarHistory.isSelected) {
+            styleTabSelection(binding.appbar.contentmain.tabbarHistory, binding.appbar.contentmain.tabbarDevices)
+        } else {
+            styleTabSelection(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
+        }
+        applyCommonTheme()
+    }
+
+    private fun styleTabSelection(active: ViewGroup, inactive: ViewGroup) {
+        active.background = Theme.roundRectInputBackgroundWithColorKeyAndRadius(
+            "color_i",
+            "round_rect_button_corner_radius"
+        )
+        inactive.background = null
+        val isDevicesActive = active.id == R.id.tabbar_devices
+        binding.appbar.contentmain.iconDevices.imageTintList =
+            Theme.buildSingleColorStateList(if (isDevicesActive) "color_a" else "color_g")
+        binding.appbar.contentmain.textDevices.setTextColor(
+            Theme.getColor(if (isDevicesActive) "color_a" else "color_g")
+        )
+        binding.appbar.contentmain.iconHistory.imageTintList =
+            Theme.buildSingleColorStateList(if (!isDevicesActive) "color_a" else "color_g")
+        binding.appbar.contentmain.textHistory.setTextColor(
+            Theme.getColor(if (!isDevicesActive) "color_a" else "color_g")
+        )
+        Theme.alphAnimate(active, 1f)
+        Theme.alphAnimate(inactive, 0.85f)
     }
 
     fun tabBarLayoutClicked(clicked: ViewGroup, unclicked: ViewGroup): Boolean {
@@ -220,8 +386,7 @@ class MainActivity : GenericActivity() {
             return false
         clicked.isSelected = true
         unclicked.isSelected = false
-        Theme.alphAnimate(clicked, 1f)
-        Theme.alphAnimate(unclicked, 0.3f)
+        styleTabSelection(clicked, unclicked)
         return true
     }
 
@@ -230,6 +395,12 @@ class MainActivity : GenericActivity() {
         if (navControllerSideMenu.currentDestination?.id == R.id.fragment_sidemenu) {
             navControllerSideMenu.navigateUp()
         } else {
+            val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
+            val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
+            if (currentFragment is org.linhome.ui.history.HistoryFragment && currentFragment.isEditing) {
+                currentFragment.exitEdition()
+                return
+            }
             super.onBackPressed()
         }
     }
@@ -279,6 +450,7 @@ class MainActivity : GenericActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (permissions.size > 0)
             onRequestPermissionsResult(requestCode, grantResults)
+        showPendingAutoConfigDialogIfNeeded()
     }
 
     @NeedsPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -295,6 +467,7 @@ class MainActivity : GenericActivity() {
     @NeedsPermission(Manifest.permission.POST_NOTIFICATIONS)
     fun notifications() {
         Compatibility.checkAndRequestFullScreenIntentPermission(this)
+        showPendingAutoConfigDialogIfNeeded()
     }
 
     // Permissions denial
@@ -349,8 +522,12 @@ class MainActivity : GenericActivity() {
 
     fun applyCommonTheme() {
         window.also { window ->
-            window.statusBarColor = Theme.getColor("color_a")
-            window.navigationBarColor = Theme.getColor("color_j")
+            window.statusBarColor = Theme.getColor("color_c")
+            window.navigationBarColor = Theme.getColor("color_c")
+            WindowInsetsControllerCompat(window, window.decorView).let { controller ->
+                controller.isAppearanceLightStatusBars = true
+                controller.isAppearanceLightNavigationBars = true
+            }
         }
     }
 
@@ -374,10 +551,15 @@ class MainActivity : GenericActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (pendingAdonisConfig != null) {
+            LinhomeApplication.coreContext.closeAppUponCallFinish = false
+        }
         if (LinhomeApplication.coreContext.closeAppUponCallFinish) {
             LinhomeApplication.coreContext.closeAppUponCallFinish = false
             finish()
+            return
         }
+        showPendingAutoConfigDialogIfNeeded()
     }
 
 }

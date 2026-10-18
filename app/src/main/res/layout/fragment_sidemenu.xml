@@ -18,6 +18,14 @@
         />
 
     <include
+        android:id="@+id/toggle_app_enabled"
+        layout="@layout/item_sidemenu"
+        android:layout_width="match_parent"
+        android:layout_height="55dp"
+        app:layout_constraintBottom_toTopOf="@id/disconnect"
+     />
+
+    <include
         android:id="@+id/disconnect"
         layout="@layout/item_sidemenu"
         android:layout_width="match_parent"
