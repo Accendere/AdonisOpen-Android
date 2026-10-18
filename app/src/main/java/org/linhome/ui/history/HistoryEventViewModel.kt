@@ -43,6 +43,7 @@ class HistoryEventViewModel(
 
     val viewMedia = MutableLiveData(false)
     val addDevice = MutableLiveData(false)
+    val copyNumberEvent = MutableLiveData(false)
 
     var historyEvent: HistoryEvent? = callLog.callId?.let {
         HistoryEventStore.findHistoryEventByCallId(it)
@@ -116,6 +117,25 @@ class HistoryEventViewModel(
 
     fun addDeviceFromHistory() {
         addDevice.value = true
+    }
+
+    fun copyNumber() {
+        copyNumberEvent.value = true
+    }
+
+    fun getSipNumber(): String {
+        val uri = callLog.remoteAddress.asStringUriOnly()
+        val afterScheme = when {
+            uri.startsWith("sips:", ignoreCase = true) -> uri.substring(5)
+            uri.startsWith("sip:", ignoreCase = true) -> uri.substring(4)
+            else -> uri.substringAfter("sip:")
+        }
+        return if (afterScheme.contains("@")) {
+            afterScheme.substringBefore("@")
+        } else {
+            val username = callLog.remoteAddress.username
+            if (!username.isNullOrEmpty()) username else afterScheme
+        }
     }
 
     fun isNew(): Boolean {

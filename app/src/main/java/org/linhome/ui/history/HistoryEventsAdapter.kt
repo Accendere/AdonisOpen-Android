@@ -20,16 +20,22 @@
 
 package org.linhome.ui.history
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Observer
 import androidx.recyclerview.widget.RecyclerView
 import org.linhome.BR
 import org.linhome.GenericFragment
+import org.linhome.LinhomeApplication
 import org.linhome.R
+import org.linhome.customisation.Texts
 import org.linhome.databinding.ItemHistoryBinding
 import org.linhome.ui.player.PlayerActivity
 import org.linphone.core.CallLog
@@ -82,6 +88,20 @@ class HistoryEventsAdapter(
                         putString("address", callLog.remoteAddress.asStringUriOnly())
                     }
                     linhomeFragment.mainactivity.navController.navigate(R.id.navigation_device_edit, bundle)
+                }
+            })
+            entryViewModel.copyNumberEvent.observe(linhomeFragment, Observer { copied ->
+                if (copied) {
+                    entryViewModel.copyNumberEvent.value = false
+                    val number = entryViewModel.getSipNumber()
+                    if (number.isNotEmpty()) {
+                        val context = linhomeFragment.context ?: LinhomeApplication.instance
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                        val clip = ClipData.newPlainText("SIP Number", number)
+                        clipboard?.setPrimaryClip(clip)
+                        val msg = Texts.get("history_number_copied", number)
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
                 }
             })
         }
