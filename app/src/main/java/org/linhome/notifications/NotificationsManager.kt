@@ -62,6 +62,7 @@ import org.linhome.store.DeviceStore
 import org.linhome.ui.call.CallInProgressActivity
 import org.linhome.ui.call.CallIncomingActivity
 import org.linhome.ui.call.CallOutgoingActivity
+import org.linhome.utils.ContactsHelper
 import org.linhome.utils.extensions.existsAndIsNotEmpty
 import org.linphone.core.Call
 import org.linphone.core.CallListenerStub
@@ -164,9 +165,12 @@ class NotificationsManager(private val context: Context) {
                             val notifiable = getNotifiableForCall(call)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && bitmap != null) {
                                 val cleanNumber = call.remoteAddress.getCleanNumber()
+                                val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
+                                val contactName = if (device == null) ContactsHelper.findContactNameByNumber(cleanNumber) else null
                                 val displayName =
-                                    DeviceStore.findDeviceByAddress(call.remoteAddress)?.name
-                                        ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+                                    device?.name
+                                        ?: contactName
+                                        ?: (if (!call.remoteAddress.displayName.isNullOrBlank() && !call.remoteAddress.displayName.equals(cleanNumber, ignoreCase = true)) call.remoteAddress.displayName else cleanNumber)
                                 val hasVideo = call.remoteParams?.isVideoEnabled ?: true
                                 val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java).apply {
                                     putExtra("callId", call.callLog.callId)
@@ -513,7 +517,10 @@ class NotificationsManager(private val context: Context) {
     private fun fillIncomingRemoteViewsForCall(call: Call, hasSnapShot: Boolean): RemoteViews {
         val device =  DeviceStore.findDeviceByAddress(call.remoteAddress)
         val cleanNumber = call.remoteAddress.getCleanNumber()
-        val displayName = device?.name ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+        val contactName = if (device == null) ContactsHelper.findContactNameByNumber(cleanNumber) else null
+        val displayName = device?.name
+            ?: contactName
+            ?: (if (!call.remoteAddress.displayName.isNullOrBlank() && !call.remoteAddress.displayName.equals(cleanNumber, ignoreCase = true)) call.remoteAddress.displayName else cleanNumber)
         val remoteView =
             if (hasSnapShot)
                 RemoteViews(
@@ -557,7 +564,10 @@ class NotificationsManager(private val context: Context) {
         val notifiable = getNotifiableForCall(call)
         val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
         val cleanNumber = call.remoteAddress.getCleanNumber()
-        val displayName = device?.name ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+        val contactName = if (device == null) ContactsHelper.findContactNameByNumber(cleanNumber) else null
+        val displayName = device?.name
+            ?: contactName
+            ?: (if (!call.remoteAddress.displayName.isNullOrBlank() && !call.remoteAddress.displayName.equals(cleanNumber, ignoreCase = true)) call.remoteAddress.displayName else cleanNumber)
 
         val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java)
         incomingCallNotificationIntent.putExtra("callId", call.callLog.callId)
@@ -688,8 +698,11 @@ class NotificationsManager(private val context: Context) {
             Log.i("[Notifications Manager] Updating missed calls notification count to $missedCallCount")
         } else {
             val cleanNumber = call.remoteAddress.getCleanNumber()
-            val name = DeviceStore.findDeviceByAddress(call.remoteAddress)?.name
-                ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+            val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
+            val contactName = if (device == null) ContactsHelper.findContactNameByNumber(cleanNumber) else null
+            val name = device?.name
+                ?: contactName
+                ?: (if (!call.remoteAddress.displayName.isNullOrBlank() && !call.remoteAddress.displayName.equals(cleanNumber, ignoreCase = true)) call.remoteAddress.displayName else cleanNumber)
             body = Texts.get("notif_missed_call", if (!name.isNullOrEmpty()) name else "device")
             Log.i("[Notifications Manager] Creating missed call notification")
         }
@@ -791,7 +804,10 @@ class NotificationsManager(private val context: Context) {
 
         val callDevice = DeviceStore.findDeviceByAddress(call.remoteAddress)
         val cleanNumber = call.remoteAddress.getCleanNumber()
-        val displayName = callDevice?.name ?: (if (!call.remoteAddress.displayName.isNullOrBlank()) call.remoteAddress.displayName else cleanNumber)
+        val contactName = if (callDevice == null) ContactsHelper.findContactNameByNumber(cleanNumber) else null
+        val displayName = callDevice?.name
+            ?: contactName
+            ?: (if (!call.remoteAddress.displayName.isNullOrBlank() && !call.remoteAddress.displayName.equals(cleanNumber, ignoreCase = true)) call.remoteAddress.displayName else cleanNumber)
 
         val builder = NotificationCompat.Builder(
             context, Texts.get("notification_channel_service_id")

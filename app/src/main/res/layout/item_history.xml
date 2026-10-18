@@ -113,8 +113,7 @@
                         android:layout_marginTop="14dp"
                         android:singleLine="true"
                         style='@{"history_list_device_name"}'
-                        text='@{model.device != null ?  model.device.name : model.getText("history_unregistered_device")}'
-                        android:text="Name" />
+                        android:text='@{model.displayName(), default="Name"}' />
 
                     <TextView
                         android:id="@+id/address"

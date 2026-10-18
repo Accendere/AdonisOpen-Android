@@ -28,6 +28,7 @@ import org.linhome.linphonecore.extensions.getCleanNumber
 import org.linhome.linphonecore.extensions.isNew
 import org.linhome.store.DeviceStore
 import org.linhome.store.HistoryEventStore
+import org.linhome.utils.ContactsHelper
 import org.linhome.utils.DateUtil
 import org.linhome.utils.databindings.ViewModelWithTools
 import org.linphone.core.Call
@@ -126,6 +127,22 @@ class HistoryEventViewModel(
 
     fun getSipNumber(): String {
         return callLog.remoteAddress.getCleanNumber()
+    }
+
+    fun displayName(): String {
+        if (device != null) {
+            return device.name
+        }
+        val cleanNumber = getSipNumber()
+        val contactName = ContactsHelper.findContactNameByNumber(cleanNumber)
+        if (!contactName.isNullOrEmpty()) {
+            return contactName
+        }
+        val sipDisplayName = callLog.remoteAddress.displayName?.trim()
+        if (!sipDisplayName.isNullOrEmpty() && !sipDisplayName.equals(cleanNumber, ignoreCase = true)) {
+            return sipDisplayName
+        }
+        return Texts.get("history_unregistered_device") ?: "Unregistered device"
     }
 
     fun displayAddress(): String {

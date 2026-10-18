@@ -50,6 +50,7 @@ import org.linhome.store.StorageManager
 import org.linhome.ui.tabbar.TabbarViewModel
 import org.linhome.ui.toolbar.ToobarButtonClickedListener
 import org.linhome.ui.toolbar.ToolbarViewModel
+import org.linhome.utils.ContactsHelper
 import org.linhome.utils.DialogUtil
 import org.linphone.core.tools.Log
 import permissions.dispatcher.NeedsPermission
@@ -466,6 +467,24 @@ class MainActivity : GenericActivity() {
 
     @NeedsPermission(Manifest.permission.POST_NOTIFICATIONS)
     fun notifications() {
+        contactsWithPermissionCheck()
+    }
+
+    @NeedsPermission(Manifest.permission.READ_CONTACTS)
+    fun contacts() {
+        ContactsHelper.clearCache()
+        Compatibility.checkAndRequestFullScreenIntentPermission(this)
+        showPendingAutoConfigDialogIfNeeded()
+    }
+
+    @OnPermissionDenied(Manifest.permission.READ_CONTACTS)
+    fun onContactsDenied() {
+        Compatibility.checkAndRequestFullScreenIntentPermission(this)
+        showPendingAutoConfigDialogIfNeeded()
+    }
+
+    @OnNeverAskAgain(Manifest.permission.READ_CONTACTS)
+    fun onContactsDeniedNeverAsk() {
         Compatibility.checkAndRequestFullScreenIntentPermission(this)
         showPendingAutoConfigDialogIfNeeded()
     }
@@ -509,14 +528,18 @@ class MainActivity : GenericActivity() {
     @OnPermissionDenied(Manifest.permission.POST_NOTIFICATIONS)
     fun onNotificationDenied() {
         GlobalScope.launch(context = Dispatchers.Main) {
-            DialogUtil.error("notifications_permission_denied")
+            DialogUtil.error("notifications_permission_denied", { _: DialogInterface, _: Int ->
+                contactsWithPermissionCheck()
+            })
         }
     }
 
     @OnNeverAskAgain(Manifest.permission.POST_NOTIFICATIONS)
     fun onNotificationsDeniedNeverAsk() {
         GlobalScope.launch(context = Dispatchers.Main) {
-            DialogUtil.error("notifications_permission_denied_dont_ask_again")
+            DialogUtil.error("notifications_permission_denied_dont_ask_again", { _: DialogInterface, _: Int ->
+                contactsWithPermissionCheck()
+            })
         }
     }
 

@@ -39,6 +39,7 @@ import org.linhome.entities.Device
 import org.linhome.entities.HistoryEvent
 import org.linhome.linphonecore.extensions.*
 import org.linhome.store.DeviceStore
+import org.linhome.utils.ContactsHelper
 import org.linhome.utils.DialogUtil
 import org.linhome.utils.extensions.existsAndIsNotEmpty
 import org.linhome.utils.getImageDimension
@@ -188,7 +189,11 @@ class CallViewModel(val call: Call) : ViewModel() {
             callerName.value = d.name
             callerAddress.value = if (!d.address.isNullOrBlank()) d.address else cleanNum
         } else {
-            if (!displayName.isNullOrEmpty() && !displayName.equals(cleanNum, ignoreCase = true)) {
+            val contactName = ContactsHelper.findContactNameByNumber(cleanNum)
+            if (!contactName.isNullOrEmpty()) {
+                callerName.value = contactName
+                callerAddress.value = if (cleanNum.isNotEmpty()) cleanNum else (if (voice) (Texts.get("call_type_voice_call") ?: "Voice Call") else call.remoteAddress.asStringUriOnly())
+            } else if (!displayName.isNullOrEmpty() && !displayName.equals(cleanNum, ignoreCase = true)) {
                 callerName.value = displayName
                 callerAddress.value = if (cleanNum.isNotEmpty()) cleanNum else (if (voice) (Texts.get("call_type_voice_call") ?: "Voice Call") else call.remoteAddress.asStringUriOnly())
             } else {
