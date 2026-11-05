@@ -5,3 +5,10 @@ build
 builds
 app/src/main/assets/linhome.zip
 app/build
+
+# Machine-specific and secret files: never commit
+local.properties
+keystore.properties
+*.keystore
+*.jks
+app/release/

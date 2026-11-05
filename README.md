@@ -59,6 +59,9 @@ To install directly to a connected Android device:
 ./gradlew installDebug
 ```
 
+### Release Signing
+Release builds are signed only when a `keystore.properties` file exists in the project root; without it they come out unsigned. Copy `keystore.properties.example` to `keystore.properties` and fill it in. Both that file and any keystore are git-ignored: never commit them.
+
 ### Android Studio
 Open the project in Android Studio, allow Gradle synchronization to complete, and run or build the `debug` or `release` variant.
 
