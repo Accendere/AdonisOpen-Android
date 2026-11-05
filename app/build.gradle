@@ -171,7 +171,8 @@ dependencies {
     androidTestImplementation 'androidx.test.ext:junit:1.3.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
 
-    implementation "org.linphone:linphone-sdk-android:5.4+"
+    // Pinned to an exact version: a release tag must rebuild exactly the published app (GPLv3 source).
+    implementation "org.linphone:linphone-sdk-android:5.4.129"
 
     // PermissionsDispatcher (not ksp compliant)
     implementation 'com.github.permissions-dispatcher:permissionsdispatcher:4.9.2'

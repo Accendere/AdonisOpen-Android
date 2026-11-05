@@ -12,3 +12,7 @@ keystore.properties
 *.jks
 *.p12
 google-services.json
+
+# Machine-specific files
+local.properties
+app/release/

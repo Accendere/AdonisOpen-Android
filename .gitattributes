@@ -1,3 +1,0 @@
-linphone-sdk/**/* filter=lfs diff=lfs merge=lfs -text
-linphone-sdk/ filter=lfs diff=lfs merge=lfs -text
-
