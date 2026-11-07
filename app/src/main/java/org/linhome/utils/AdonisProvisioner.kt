@@ -29,6 +29,8 @@ import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import org.linhome.webhooks.WebhookConfig
+import org.linhome.webhooks.Webhooks
 import org.linhome.LinhomeApplication
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.LinhomeApplication.Companion.corePreferences
@@ -69,7 +71,9 @@ data class AdonisSipConfig(
 data class AdonisConfig(
     val sip: AdonisSipConfig? = null,
     val devices: List<AdonisDeviceConfig> = emptyList(),
-    val remoteProvisioningUrl: String? = null
+    val remoteProvisioningUrl: String? = null,
+    /** The site's webhooks; null when the link has none (then the app calls nothing). */
+    val webhook: WebhookConfig? = null
 )
 
 object AdonisProvisioner {
@@ -124,7 +128,7 @@ object AdonisProvisioner {
             for (param in uri.queryParameterNames) {
                 val lower = param.lowercase()
                 if (lower.contains("pass") || lower.contains("pwd") || lower.contains("data") ||
-                    lower.contains("payload") || lower.contains("config") || lower.contains("key") || lower.contains("secret")) {
+                    lower.contains("payload") || lower.contains("config") || lower.contains("key") || lower.contains("secret") || lower.contains("token")) {
                     builder.appendQueryParameter(param, "REDACTED")
                 } else {
                     builder.appendQueryParameter(param, uri.getQueryParameter(param))
@@ -276,10 +280,14 @@ object AdonisProvisioner {
                 if (scheme == "https" || scheme == "http") remoteUrl else null
             } else null
 
+            val webhook = WebhookConfig.fromLinkJson(root)
+            WebhookConfig.lastRejectionReason?.let { Log.w("$TAG Ignoring the link's webhooks: $it") }
+
             AdonisConfig(
                 sip = sipConfig,
                 devices = devicesList,
-                remoteProvisioningUrl = validRemoteUrl
+                remoteProvisioningUrl = validRemoteUrl,
+                webhook = webhook
             )
         } catch (e: Exception) {
             Log.e("$TAG Error parsing JSON config: $e")
@@ -399,6 +407,9 @@ object AdonisProvisioner {
                             LinhomeAccount.linkProxiesWithPushAccount(androidx.lifecycle.MutableLiveData())
                         }
                         Log.i("$TAG SIP account created successfully and registration refreshed")
+                        // The webhooks belong to the SIP account: a link with an account replaces them
+                        // (or clears them when it has none); a devices-only link leaves them alone.
+                        Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
                     } else {
                         Log.e("$TAG Failed to create account in core using AccountCreator")
                     }

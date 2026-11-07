@@ -22,6 +22,7 @@
 package org.linhome.entities
 
 import androidx.lifecycle.MutableLiveData
+import org.linhome.webhooks.Webhooks
 import org.linhome.LinhomeApplication
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.LinhomeApplication.Companion.corePreferences
@@ -113,6 +114,7 @@ object LinhomeAccount {
     fun setAppEnabled(enabled: Boolean) {
         corePreferences.appEnabled = enabled
         appEnabledLiveData.postValue(enabled)
+        Webhooks.onSwitchChanged(enabled)
         val defaultExpires = corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
         coreContext.core.accountList.forEach { account ->
             account.params.clone().also { newParams ->

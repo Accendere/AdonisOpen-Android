@@ -69,6 +69,14 @@ Open the project in Android Studio, allow Gradle synchronization to complete, an
 ### Home Assistant Auto-Configuration
 Adonis Open supports instant auto-configuration from Home Assistant or external setup URLs using the `adonis://` deep link scheme. A base64-encoded JSON configuration string containing SIP credentials and door station device settings can be provisioned in one step.
 
+### Site Webhooks
+A setup link can also carry the site's webhooks (`webhook_baseurl`, `webhook_user`, `webhook_token`, `use_webhook_to_poll`, `polling_interval`). The contract is `docs/features/adonis-open-webhooks.md` in the Adonis repository; the code is in `app/src/main/java/org/linhome/webhooks/`.
+- **`state`**: the app tells the site whether its receive-calls switch is on: at start, after a link is applied, and whenever the switch changes. Failed sends retry with backoff (10 s, 30 s, 2 min, then every 10 min) and right away when the network comes back; only the latest state is sent.
+- **`poll`**: `use_webhook_to_poll` is `never`, `foreground_only` (while the app is on screen) or `always` (whenever the app's process runs). Older links with `true`/`false` mean `foreground_only`/`never`. Messages are not handled yet.
+- Only `https://` base URLs are used, redirects are never followed, and the token is kept in the app's private storage and never logged.
+- A link with a SIP account replaces the webhook settings (or clears them when it has none); a devices-only link leaves them alone.
+- If the site rejects the token (401), all calls stop and a banner asks the person to scan their new link.
+
 ### Quick Settings & Widgets
 - **Quick Settings Tile**: Toggle "Receive Calls" on or off directly from the Android quick settings notification shade.
 - **Home Screen Widget**: 1x1 toggle widget displaying live call reception state (green when active, red when paused).

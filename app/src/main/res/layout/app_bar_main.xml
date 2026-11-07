@@ -155,45 +155,39 @@
                             />
                     </RelativeLayout>
 
+                    <!-- Receive-calls toggle: a 48dp tap target drawing a 36dp pill in the theme's accent
+                         (filled = taking calls, outlined = paused). Colors are set in MainActivity. -->
                     <LinearLayout
                         android:id="@+id/toolbar_calls_toggle"
                         android:layout_width="wrap_content"
-                        android:layout_height="34dp"
+                        android:layout_height="48dp"
+                        android:minWidth="96dp"
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true"
-                        android:layout_marginEnd="12dp"
-                        android:paddingStart="11dp"
-                        android:paddingEnd="6dp"
-                        android:gravity="center_vertical"
+                        android:layout_marginEnd="10dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="16dp"
+                        android:gravity="center"
                         android:orientation="horizontal"
                         android:clickable="true"
-                        android:focusable="true"
-                        android:elevation="2dp">
+                        android:focusable="true">
+
+                        <ImageView
+                            android:id="@+id/toolbar_calls_toggle_icon"
+                            android:layout_width="18dp"
+                            android:layout_height="18dp"
+                            android:layout_marginEnd="7dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_qs_receive_calls" />
 
                         <TextView
                             android:id="@+id/toolbar_calls_toggle_label"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="7dp"
+                            android:maxLines="1"
                             android:text="Calls ON"
-                            android:textColor="@android:color/white"
-                            android:textSize="12sp"
+                            android:textSize="14sp"
                             android:textStyle="bold" />
-
-                        <FrameLayout
-                            android:id="@+id/toolbar_calls_toggle_track"
-                            android:layout_width="34dp"
-                            android:layout_height="20dp"
-                            android:padding="2dp">
-
-                            <View
-                                android:id="@+id/toolbar_calls_toggle_thumb"
-                                android:layout_width="16dp"
-                                android:layout_height="16dp"
-                                android:layout_gravity="end|center_vertical"
-                                android:background="@drawable/round_shape"
-                                android:backgroundTint="@android:color/white" />
-                        </FrameLayout>
                     </LinearLayout>
 
 
@@ -226,6 +220,23 @@
                 </RelativeLayout>
 
             </androidx.appcompat.widget.Toolbar>
+
+            <!-- Shown when the site rejected this phone's webhook token (401): the person must scan
+                 their setup link again. Colors and text are set in MainActivity. -->
+            <TextView
+                android:id="@+id/webhook_relink_banner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:paddingTop="10dp"
+                android:paddingBottom="10dp"
+                android:textSize="14sp"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone" />
 
         </com.google.android.material.appbar.AppBarLayout>
 
