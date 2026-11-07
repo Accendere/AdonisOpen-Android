@@ -41,6 +41,8 @@ import androidx.navigation.findNavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import org.linhome.webhooks.WebhookStatus
+import org.linhome.webhooks.Webhooks
 import org.linhome.compatibility.Compatibility
 import org.linhome.customisation.Texts
 import org.linhome.customisation.Theme
@@ -178,6 +180,11 @@ class MainActivity : GenericActivity() {
             updateToolbarCallsToggle()
         }
         updateToolbarCallsToggle()
+
+        binding.appbar.webhookRelinkBanner.setOnClickListener {
+            navController.navigate(R.id.navigation_assistant_remote_qr)
+        }
+        Webhooks.status.observe(this) { updateWebhookRelinkBanner(it) }
 
         LinhomeApplication.coreContext.closeAppUponCallFinish = false
         val isAdonisIntent = intent?.data?.scheme.equals("adonis", ignoreCase = true)
@@ -429,34 +436,55 @@ class MainActivity : GenericActivity() {
 
         val enabled = LinhomeApplication.corePreferences.appEnabled
         val density = resources.displayMetrics.density
+        val accent = Theme.getColor("color_a")
+        // White on the accent, unless the accent is too light for it (e.g. the amber theme): then the dark text color.
+        val onAccent = Theme.getColor("color_c").let { light ->
+            if (androidx.core.graphics.ColorUtils.calculateContrast(light, accent or 0xFF000000.toInt()) >= 3.0) light
+            else Theme.getColor("color_b")
+        }
 
-        // Colored pill background (Emerald green when active, Crimson red when paused)
-        val pillBg = android.graphics.drawable.GradientDrawable().apply {
+        // A 36dp pill inside the 48dp tap target, in the theme's accent color:
+        // filled while taking calls, outlined (accent border and text) while paused.
+        val pill = android.graphics.drawable.GradientDrawable().apply {
             shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            cornerRadius = 17f * density
-            setColor(Theme.getColor(if (enabled) "color_k" else "color_e"))
+            cornerRadius = 18f * density
+            if (enabled) {
+                setColor(accent)
+            } else {
+                setColor(android.graphics.Color.TRANSPARENT)
+                setStroke((2f * density).toInt(), accent)
+            }
         }
-        binding.appbar.toolbarCallsToggle.background = pillBg
+        val inset = (6f * density).toInt()
+        val ripple = android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(if (enabled) onAccent else accent, 0x40)),
+            android.graphics.drawable.InsetDrawable(pill, 0, inset, 0, inset),
+            null
+        )
+        binding.appbar.toolbarCallsToggle.background = ripple
 
-        // Semi-transparent white track background
-        val trackBg = android.graphics.drawable.GradientDrawable().apply {
-            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            cornerRadius = 10f * density
-            setColor(android.graphics.Color.parseColor("#40FFFFFF"))
-        }
-        binding.appbar.toolbarCallsToggleTrack.background = trackBg
-
-        // Thumb position (END when ON, START when OFF)
-        val thumbParams = binding.appbar.toolbarCallsToggleThumb.layoutParams as? android.widget.FrameLayout.LayoutParams
-        if (thumbParams != null) {
-            thumbParams.gravity = (if (enabled) android.view.Gravity.END else android.view.Gravity.START) or android.view.Gravity.CENTER_VERTICAL
-            binding.appbar.toolbarCallsToggleThumb.layoutParams = thumbParams
-        }
-
-        // Status text
+        val foreground = if (enabled) onAccent else accent
+        binding.appbar.toolbarCallsToggleIcon.setImageResource(
+            if (enabled) R.drawable.ic_qs_receive_calls else R.drawable.ic_qs_receive_calls_off
+        )
+        binding.appbar.toolbarCallsToggleIcon.imageTintList = android.content.res.ColorStateList.valueOf(foreground)
+        binding.appbar.toolbarCallsToggleLabel.setTextColor(foreground)
         binding.appbar.toolbarCallsToggleLabel.text =
             Texts.get(if (enabled) "toolbar_calls_active" else "toolbar_calls_paused")
-                ?: if (enabled) "Calls ON" else "Paused"
+        binding.appbar.toolbarCallsToggle.contentDescription =
+            Texts.get(if (enabled) "toolbar_calls_toggle_desc_active" else "toolbar_calls_toggle_desc_paused")
+    }
+
+    private fun updateWebhookRelinkBanner(status: WebhookStatus?) {
+        val banner = binding.appbar.webhookRelinkBanner
+        if (status != WebhookStatus.UNAUTHORIZED) {
+            banner.visibility = View.GONE
+            return
+        }
+        banner.text = Texts.get("webhook_relink_banner")
+        banner.setTextColor(Theme.getColor("color_b"))
+        banner.setBackgroundColor(Theme.getColor("color_i"))
+        banner.visibility = View.VISIBLE
     }
 
     fun pauseNavigation() {

@@ -23,6 +23,7 @@ package org.linhome
 import android.app.Application
 import android.content.Context
 import android.content.res.Configuration
+import org.linhome.webhooks.Webhooks
 import org.linhome.compatibility.Compatibility
 import org.linhome.customisation.Customisation
 import org.linhome.customisation.Texts
@@ -121,6 +122,7 @@ class LinhomeApplication : Application() {
         Customisation
         Texts
         ensureCoreExists(applicationContext)
+        Webhooks.init(this, corePreferences.appEnabled)
         Compatibility.setupAppStartupListener(applicationContext)
         DeviceStore
     }
