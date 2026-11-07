@@ -86,6 +86,14 @@ A site can hand out a one-time **claim URL** (`https://<site>/.../claim/<code>`)
 - It POSTs `{"device_id","platform"}` to the claim URL, gets back the same JSON an `adonis://configure` link carries, and shows the usual confirmation dialog naming the site. After the person applies it, it POSTs to `<claim URL>/confirm` (retried with backoff), which uses the code up.
 - Only `https://` claim URLs are used, redirects are never followed, and the URL (it holds the code) is never logged; logs name the host only.
 
+### LAN Pairing (find the site on the Wi-Fi)
+With no link at all, the app can find its site on the local network. The contract is the "LAN pairing" section of `docs/features/adonis-open-setup-link.md` in the Adonis repository; the code is in `app/src/main/java/org/linhome/pairing/`.
+- The site announces `_adonis-open._tcp` over mDNS with TXT `v=1`, `name` and `url` (its https pairing address). The app only ever uses that `url`, never the resolved IP, so the certificate matches; the site's public hostname must therefore resolve inside the LAN.
+- The app searches once on first launch with no account (silently: it only speaks up when it found a site), and whenever the person taps **Find my site on this Wi-Fi** on the Account screen or in the assistant.
+- `POST <url>/start` gives a 6-digit code, which the app shows; an administrator (or the person, in Home Assistant) approves it on the site. The app polls `poll_url` with the pairing id in the body; once approved it receives a claim URL and continues exactly as a claim link (fetch, dialog, confirm).
+- The poll URL and the claim URL must be on the announced host and port, and https; anything else is refused.
+- Discovery uses Android's `NsdManager` (no extra permission today). Android's upcoming local-network permission will need handling when the app targets an SDK that enforces it.
+
 ### Quick Settings & Widgets
 - **Quick Settings Tile**: Toggle "Receive Calls" on or off directly from the Android quick settings notification shade.
 - **Home Screen Widget**: 1x1 toggle widget displaying live call reception state (green when active, red when paused).

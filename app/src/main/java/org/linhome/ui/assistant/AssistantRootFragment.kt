@@ -47,6 +47,9 @@ class AssistantRootFragment : GenericFragment() {
         binding.remote.setOnClickListener {
             mainactivity.navController.navigate(R.id.navigation_assistant_remote_root)
         }
+        binding.findSite.setOnClickListener {
+            org.linhome.pairing.Pairing.searchFromButton(mainactivity)
+        }
         return binding.root
     }
 

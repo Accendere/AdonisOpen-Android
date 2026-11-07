@@ -65,6 +65,10 @@ class AccountFragment : Fragment() {
             findNavController().navigate(R.id.navigation_assistant_remote_root)
         }
 
+        binding.setupFindSite.setOnClickListener {
+            org.linhome.pairing.Pairing.searchFromButton(requireActivity() as org.linhome.MainActivity)
+        }
+
         binding.refreshRegisters.setOnClickListener {
             model.refreshRegisters()
         }

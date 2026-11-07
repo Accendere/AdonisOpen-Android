@@ -252,6 +252,8 @@ class MainActivity : GenericActivity() {
         // First launch with no account: pick up a claim link the site's page put on the clipboard.
         if (hasFocus && !LinhomeAccount.configured() && pendingAdonisConfig == null && currentAutoConfigDialog == null) {
             org.linhome.claim.Claims.checkClipboard(this)
+            // No link on the clipboard: look for the site on the Wi-Fi (LAN pairing).
+            org.linhome.pairing.Pairing.searchAutomatically(this)
         }
     }
 
@@ -770,6 +772,17 @@ class MainActivity : GenericActivity() {
         }
         updateToolbarCallsToggle()
         showPendingAutoConfigDialogIfNeeded()
+        org.linhome.pairing.Pairing.attach(this)
+        org.linhome.pairing.Pairing.resumePendingClaim(this)
     }
+
+    override fun onDestroy() {
+        org.linhome.pairing.Pairing.detach(this)
+        super.onDestroy()
+    }
+
+    /** True while the "Import Configuration" dialog is up or waiting to be shown. */
+    val autoConfigPending: Boolean
+        get() = pendingAdonisConfig != null || currentAutoConfigDialog?.isShowing == true
 
 }

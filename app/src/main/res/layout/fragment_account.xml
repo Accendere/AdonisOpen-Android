@@ -80,6 +80,21 @@
                 />
 
             <org.linhome.ui.widgets.LRoundRectButton
+                android:id="@+id/setup_find_site"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_width="320dp"
+                android:layout_height="48dp"
+                android:layout_marginTop="16dp"
+                app:layout_constraintTop_toBottomOf="@id/setup_remote"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                primary='@{false}'
+                text='@{"assistant_find_site_lan"}'
+                android:visibility="@{model.account == null ? View.VISIBLE : View.GONE}"
+                />
+
+            <org.linhome.ui.widgets.LRoundRectButton
                 android:id="@+id/refresh_registers"
                 android:clickable="true"
                 android:focusable="true"
