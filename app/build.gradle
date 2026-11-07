@@ -2,7 +2,7 @@ import javax.inject.Inject
 
 plugins {
     id "org.jetbrains.kotlin.kapt"
-    id 'com.google.devtools.ksp' version '2.2.20-2.0.3'
+    id 'com.google.devtools.ksp' version '2.3.6'
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-parcelize'
@@ -148,6 +148,11 @@ android {
         jvmTarget = "1.8"
     }
     namespace 'org.linhome'
+    packaging {
+        jniLibs {
+            useLegacyPackaging true
+        }
+    }
 }
 
 dependencies {

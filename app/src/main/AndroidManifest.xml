@@ -44,7 +44,6 @@
 
 
     <application
-        android:extractNativeLibs="true"
         android:hardwareAccelerated="true"
         android:name="org.linhome.LinhomeApplication"
         android:allowBackup="false"
