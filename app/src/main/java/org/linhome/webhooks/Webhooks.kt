@@ -142,6 +142,9 @@ object Webhooks {
         created.onAppStart(callsEnabled)
     }
 
+    /** This phone's id (made once, kept for good), also sent with claim links. */
+    fun deviceId(context: Context): String = SharedPreferencesWebhookStorage(context.applicationContext).deviceId
+
     fun onSwitchChanged(enabled: Boolean) = onMain { it.onSwitchChanged(enabled) }
 
     fun onLinkApplied(config: WebhookConfig?, callsEnabled: Boolean) = onMain { it.onLinkApplied(config, callsEnabled) }

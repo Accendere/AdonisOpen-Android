@@ -77,6 +77,12 @@ A setup link can also carry the site's webhooks (`webhook_baseurl`, `webhook_use
 - A link with a SIP account replaces the webhook settings (or clears them when it has none); a devices-only link leaves them alone.
 - If the site rejects the token (401), all calls stop and a banner asks the person to scan their new link.
 
+### Claim Links (setup right after install)
+A site can hand out a one-time **claim URL** (`https://<site>/.../claim/<code>`) instead of the setup data itself. The contract is the "Claim links" section of `docs/features/adonis-open-setup-link.md` in the Adonis repository; the code is in `app/src/main/java/org/linhome/claim/`.
+- The app gets a claim URL from `adonis://claim?url=<https claim URL>`, or, on first launch with no account, from the clipboard (the site's "Install and set up" button copies it before opening the Play Store).
+- It POSTs `{"device_id","platform"}` to the claim URL, gets back the same JSON an `adonis://configure` link carries, and shows the usual confirmation dialog naming the site. After the person applies it, it POSTs to `<claim URL>/confirm` (retried with backoff), which uses the code up.
+- Only `https://` claim URLs are used, redirects are never followed, and the URL (it holds the code) is never logged; logs name the host only.
+
 ### Quick Settings & Widgets
 - **Quick Settings Tile**: Toggle "Receive Calls" on or off directly from the Android quick settings notification shade.
 - **Home Screen Widget**: 1x1 toggle widget displaying live call reception state (green when active, red when paused).

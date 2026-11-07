@@ -188,14 +188,15 @@ class MainActivity : GenericActivity() {
 
         LinhomeApplication.coreContext.closeAppUponCallFinish = false
         val isAdonisIntent = intent?.data?.scheme.equals("adonis", ignoreCase = true)
+        var claimStarted = false
         if (isAdonisIntent) {
             LinhomeApplication.coreContext.closeAppUponCallFinish = false
             intent?.data?.let { uri ->
-                pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)
+                claimStarted = handleAdonisUri(uri)
             }
         }
 
-        if (!LinhomeAccount.configured() && pendingAdonisConfig == null && (savedInstanceState == null || !savedInstanceState.getBoolean("ignored_no_account"))) {
+        if (!LinhomeAccount.configured() && pendingAdonisConfig == null && !claimStarted && (savedInstanceState == null || !savedInstanceState.getBoolean("ignored_no_account"))) {
             navController.navigate(R.id.navigation_account)
         }
 
@@ -222,9 +223,35 @@ class MainActivity : GenericActivity() {
         if (intent?.data?.scheme.equals("adonis", ignoreCase = true)) {
             LinhomeApplication.coreContext.closeAppUponCallFinish = false
             intent?.data?.let { uri ->
-                pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)
+                handleAdonisUri(uri)
             }
             showPendingAutoConfigDialogIfNeeded()
+        }
+    }
+
+    /**
+     * `adonis://claim?url=<https claim URL>` starts a claim link (returns true);
+     * anything else is a setup link parsed as before.
+     */
+    private fun handleAdonisUri(uri: android.net.Uri): Boolean {
+        if (uri.host.equals("claim", ignoreCase = true)) {
+            val claimUrl = org.linhome.claim.ClaimContract.validate(uri.getQueryParameter("url"))
+            if (claimUrl == null) {
+                Log.w("[MainActivity] Ignoring a claim link without a valid https URL")
+                return false
+            }
+            org.linhome.claim.Claims.start(this, claimUrl)
+            return true
+        }
+        pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)
+        return false
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // First launch with no account: pick up a claim link the site's page put on the clipboard.
+        if (hasFocus && !LinhomeAccount.configured() && pendingAdonisConfig == null && currentAutoConfigDialog == null) {
+            org.linhome.claim.Claims.checkClipboard(this)
         }
     }
 
@@ -248,6 +275,11 @@ class MainActivity : GenericActivity() {
             .create()
 
         currentAutoConfigDialog = dialog
+
+        config.claimUrl?.let { claimUrl ->
+            dialogView.findViewById<android.widget.TextView>(R.id.dialog_subtitle).text =
+                Texts.get("adonis_claim_from", org.linhome.claim.ClaimContract.hostOf(claimUrl))
+        }
 
         // Populate SIP details
         val sipCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.sip_card)
@@ -388,6 +420,7 @@ class MainActivity : GenericActivity() {
                 overwriteExistingDevices = approveDeviceOverwrites
             ) { success, _ ->
                 if (success) {
+                    configToApply.claimUrl?.let { org.linhome.claim.Claims.confirm(this, it) }
                     try {
                         if (navController.currentDestination?.id != R.id.navigation_devices) {
                             navController.popBackStack(R.id.navigation_devices, false)

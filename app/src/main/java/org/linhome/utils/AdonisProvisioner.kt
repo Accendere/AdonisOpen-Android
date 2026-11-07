@@ -73,7 +73,9 @@ data class AdonisConfig(
     val devices: List<AdonisDeviceConfig> = emptyList(),
     val remoteProvisioningUrl: String? = null,
     /** The site's webhooks; null when the link has none (then the app calls nothing). */
-    val webhook: WebhookConfig? = null
+    val webhook: WebhookConfig? = null,
+    /** Set when the config came from a claim link: confirmed to the site once applied. Never log it. */
+    val claimUrl: String? = null
 )
 
 object AdonisProvisioner {
