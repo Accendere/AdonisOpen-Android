@@ -103,10 +103,28 @@ class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
             prefs.edit().putStringSet("pending_acks", value.toSet()).apply()
         }
 
+    private val appContext = context.applicationContext
+
+    /**
+     * Made once and kept. A new install derives it from Android's per-app device id (ANDROID_ID: the same for
+     * this app on this phone and user across reinstalls, since Android 8), so reinstalling or clearing the app's
+     * data doesn't look like a new phone to the site, which counts a person as taking calls while any of their
+     * phones says so. An install that already has an id keeps it, so updating the app doesn't either.
+     */
     override val deviceId: String
-        get() = prefs.getString("device_id", null) ?: UUID.randomUUID().toString().also {
+        get() = prefs.getString("device_id", null) ?: stableDeviceId(appContext).also {
             prefs.edit().putString("device_id", it).apply()
         }
+}
+
+/** A UUID derived from ANDROID_ID (never sent as such), or a random one when the phone gives none. */
+internal fun stableDeviceId(context: Context): String {
+    val androidId = runCatching {
+        android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+    }.getOrNull()
+    // Some old emulators and broken builds share one fixed value: not an identity.
+    if (androidId.isNullOrBlank() || androidId == "9774d56d682e549c") return UUID.randomUUID().toString()
+    return UUID.nameUUIDFromBytes("adonis-open-device:$androidId".toByteArray(Charsets.UTF_8)).toString()
 }
 
 /** The app's single [WebhookEngine], wired to Android: network changes, foreground, logs. */
