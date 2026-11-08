@@ -209,30 +209,35 @@
 
         <LinearLayout
             android:id="@+id/answered_elsewhere_card"
-            android:layout_width="300dp"
+            android:layout_width="320dp"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:padding="24dp"
+            android:layout_marginBottom="32dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="14dp"
             android:elevation="12dp"
             android:visibility="gone"
             roundRectWithColor='@{"color_d"}'
             andRadius='@{"device_in_device_list_corner_radius"}'
-            app:layout_constraintTop_toTopOf="parent"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toRightOf="parent">
 
+            <!-- Sits where the answer/decline buttons were (they are hidden meanwhile), so the door's image stays visible. -->
             <ImageView
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginBottom="12dp"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_marginEnd="14dp"
                 tint='@{"color_a"}'
                 src='@{"icons/phone"}' />
 
             <TextView
                 android:id="@+id/answered_elsewhere_text"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
+                android:layout_weight="1"
                 android:layout_height="wrap_content"
                 style='@{"view_sub_title"}'
                 android:text="Call was answered on another device" />
