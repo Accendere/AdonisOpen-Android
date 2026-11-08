@@ -4,6 +4,12 @@
     <!-- Helps filling notification_phone number and country code in assistant -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- Lets the pairing dialog see whether the Home Assistant app is installed ("Approve in Home Assistant"). -->
+    <queries>
+        <package android:name="io.homeassistant.companion.android" />
+        <package android:name="io.homeassistant.companion.android.minimal" />
+    </queries>
+
     <!-- Needed for auto start at boot and to ensure the service won't be killed by OS while in call -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 

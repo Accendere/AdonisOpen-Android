@@ -324,16 +324,89 @@ object AdonisProvisioner {
         }
     }
 
+    private fun mapDeviceType(type: String): String = when (type.lowercase().trim()) {
+        "camera", "security_camera", "device_security_camera", "device_type_camera", "device_type_security_camera" -> "device_security_camera"
+        "internal_unit", "monitor", "device_internal_unit", "device_type_internal_unit" -> "device_internal_unit"
+        "audio", "audio_intercom", "device_audio_intercom", "device_type_audio_intercom" -> "device_audio_intercom"
+        else -> "device_video_intercom"
+    }
+
+    private fun mapMethod(method: String): String = when (method.lowercase().trim()) {
+        "rfc2833", "rfc4733", "method_dtmf_rfc_4733", "rfc_4733", "rfc_2833", "dtmf" -> "method_dtmf_rfc_4733"
+        "sip_message", "sipmessage", "method_sip_message", "message" -> "method_sip_message"
+        else -> "method_dtmf_sip_info"
+    }
+
+    /** The app's action type for a link's (`light`, `action_type_lightup`, ... -> `action_lightup`); also its text key. */
+    fun mapActionType(type: String): String = when (type.lowercase().trim()) {
+        "open_gate", "gate", "gate_open", "action_open_gate", "action_type_open_gate" -> "action_open_gate"
+        "lightup", "light", "light_up", "action_lightup", "action_type_lightup" -> "action_lightup"
+        "unlock", "action_unlock", "action_type_unlock" -> "action_unlock"
+        else -> "action_open_door"
+    }
+
+    private fun mapActions(actions: List<AdonisActionConfig>): List<Action> {
+        val mapped = actions.map { act -> Action(mapActionType(act.type), act.code) }
+        return mapped.ifEmpty { listOf(Action("action_open_door", "#")) }
+    }
+
+    /** The account the phone has now, for the import screen's comparison; null when there is none. */
+    private fun currentSip(): CurrentSip? {
+        val account = LinhomeAccount.get() ?: return null
+        val params = account.params ?: return null
+        val identity = params.identityAddress ?: return null
+        val username = identity.username ?: return null
+        val domain = identity.domain ?: return null
+        val proxy = params.routesAddresses?.firstOrNull()?.let { route ->
+            val host = route.domain ?: return@let null
+            if (route.port > 0) "$host:${route.port}" else host
+        }
+        val transport = params.transport?.name?.lowercase()
+        val password = runCatching { coreContext.core.findAuthInfo(null, username, domain)?.password }.getOrNull()
+        return CurrentSip(username, domain, proxy, transport, password?.takeIf { it.isNotEmpty() })
+    }
+
+    /** Compares [config] with what the phone has: what the import screen shows and pre-selects. */
+    fun buildImportPlan(config: AdonisConfig): ImportPlan {
+        val sip = config.sip?.let { ImportPlan.compareSip(it, currentSip()) }
+        val devices = config.devices.mapIndexed { index, dev ->
+            val match = findMatchingExistingDevice(dev, config.sip?.domain)?.let { existing ->
+                CurrentDevice(
+                    existing.name, existing.address, existing.alternativeAddress,
+                    existing.actionsMethodType ?: corePreferences.defaultActionsMethodType ?: "",
+                    existing.actions.orEmpty().map { (it.type ?: "") to it.code }
+                )
+            }
+            ImportPlan.compareDevice(
+                index, dev, match,
+                formattedAddress = { formatSipAddress(it, config.sip?.domain) },
+                mappedMethod = mapMethod(dev.method),
+                mappedActions = mapActions(dev.actions).map { (it.type ?: "") to it.code }
+            )
+        }
+        val webhook = ImportPlan.compareWebhook(config.webhook, Webhooks.config, linkHasSip = config.sip != null)
+        return ImportPlan(sip, devices, webhook, config.remoteProvisioningUrl?.takeIf { it.isNotBlank() })
+    }
+
+    /** Applies the parts of [config] that [selection] keeps (the import screen). */
+    fun applySelection(
+        context: Context,
+        config: AdonisConfig,
+        selection: ImportSelection,
+        onComplete: ((Boolean, String) -> Unit)? = null
+    ) = applyConfig(context, config, overwriteExistingDevices = true, onComplete = onComplete, selection = selection)
+
     fun applyConfig(
         context: Context,
         config: AdonisConfig,
         overwriteExistingDevices: Boolean = false,
-        onComplete: ((Boolean, String) -> Unit)? = null
+        onComplete: ((Boolean, String) -> Unit)? = null,
+        selection: ImportSelection? = null
     ) {
         GlobalScope.launch(Dispatchers.Main) {
             try {
                 // Case 1: Remote XML Provisioning URL
-                if (!config.remoteProvisioningUrl.isNullOrBlank()) {
+                if (!config.remoteProvisioningUrl.isNullOrBlank() && (selection == null || selection.remoteProvisioning)) {
                     Log.i("$TAG Starting remote provisioning with URL: ${config.remoteProvisioningUrl}")
                     coreContext.core.provisioningUri = config.remoteProvisioningUrl
                     coreContext.core.stop()
@@ -346,7 +419,7 @@ object AdonisProvisioner {
 
                 // Case 2: SIP Account Configuration (always overwrites existing account once approved)
                 var sipConfigured = false
-                config.sip?.let { sip ->
+                config.sip?.takeIf { selection == null || selection.sip }?.let { sip ->
                     Log.i("$TAG Configuring SIP account for ${sip.username}@${sip.domain}")
                     val core = coreContext.core
                     // Clean up any existing non-push accounts without stopping the core
@@ -411,17 +484,24 @@ object AdonisProvisioner {
                         Log.i("$TAG SIP account created successfully and registration refreshed")
                         // The webhooks belong to the SIP account: a link with an account replaces them
                         // (or clears them when it has none); a devices-only link leaves them alone.
-                        Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
+                        // On the import screen they are their own choice (below).
+                        if (selection == null) Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
                     } else {
                         Log.e("$TAG Failed to create account in core using AccountCreator")
                     }
+                }
+
+                // The import screen's webhook choice (a link with a SIP account carries them, or their absence).
+                if (selection != null && selection.webhook && config.sip != null) {
+                    Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
                 }
 
                 // Case 3: Device(s) Configuration (additive by default; overwrites only if explicitly approved)
                 var devicesAddedCount = 0
                 var devicesUpdatedCount = 0
                 var devicesSkippedCount = 0
-                for (dev in config.devices) {
+                for ((index, dev) in config.devices.withIndex()) {
+                    if (selection != null && index !in selection.devices) continue
                     val formattedAddress = formatSipAddress(dev.address, config.sip?.domain)
                     val existingDevice = findMatchingExistingDevice(dev, config.sip?.domain)
 
@@ -431,32 +511,9 @@ object AdonisProvisioner {
                         continue
                     }
 
-                    val mappedType = when (dev.type.lowercase().trim()) {
-                        "camera", "security_camera", "device_security_camera", "device_type_camera", "device_type_security_camera" -> "device_security_camera"
-                        "internal_unit", "monitor", "device_internal_unit", "device_type_internal_unit" -> "device_internal_unit"
-                        "audio", "audio_intercom", "device_audio_intercom", "device_type_audio_intercom" -> "device_audio_intercom"
-                        else -> "device_video_intercom"
-                    }
-
-                    val mappedMethod = when (dev.method.lowercase().trim()) {
-                        "rfc2833", "rfc4733", "method_dtmf_rfc_4733", "rfc_4733", "rfc_2833", "dtmf" -> "method_dtmf_rfc_4733"
-                        "sip_message", "sipmessage", "method_sip_message", "message" -> "method_sip_message"
-                        else -> "method_dtmf_sip_info"
-                    }
-
-                    val actionsList = ArrayList<Action>()
-                    for (act in dev.actions) {
-                        val actType = when (act.type.lowercase().trim()) {
-                            "open_gate", "gate", "gate_open", "action_open_gate", "action_type_open_gate" -> "action_open_gate"
-                            "lightup", "light", "light_up", "action_lightup", "action_type_lightup" -> "action_lightup"
-                            "unlock", "action_unlock", "action_type_unlock" -> "action_unlock"
-                            else -> "action_open_door"
-                        }
-                        actionsList.add(Action(actType, act.code))
-                    }
-                    if (actionsList.isEmpty()) {
-                        actionsList.add(Action("action_open_door", "#"))
-                    }
+                    val mappedType = mapDeviceType(dev.type)
+                    val mappedMethod = mapMethod(dev.method)
+                    val actionsList = ArrayList(mapActions(dev.actions))
 
                     if (existingDevice != null) {
                         DeviceStore.removeDevice(existingDevice)

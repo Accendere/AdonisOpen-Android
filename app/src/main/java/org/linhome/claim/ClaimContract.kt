@@ -59,13 +59,18 @@ object ClaimContract {
 
     fun hostOf(claimUrl: String): String = runCatching { URI(claimUrl).host }.getOrNull() ?: "?"
 
-    private fun body(deviceId: String) = JSONObject().put("device_id", deviceId).put("platform", PLATFORM).toString()
+    private fun body(deviceId: String, declined: Boolean = false): String {
+        val body = JSONObject().put("device_id", deviceId).put("platform", PLATFORM)
+        if (declined) body.put("declined", true)
+        return body.toString()
+    }
 
     private val headers = mapOf("Content-Type" to "application/json", "Accept" to "application/json")
 
     fun fetchRequest(claimUrl: String, deviceId: String) = ClaimRequest(claimUrl, body(deviceId))
 
-    fun confirmRequest(claimUrl: String, deviceId: String) = ClaimRequest("$claimUrl/confirm", body(deviceId))
+    /** [declined]: the person dismissed the setup (a pushed config update); the site stops offering it. */
+    fun confirmRequest(claimUrl: String, deviceId: String, declined: Boolean = false) = ClaimRequest("$claimUrl/confirm", body(deviceId, declined))
 
     /** Wraps the claim URL so it never reaches a log through toString(). */
     class ClaimRequest(val url: String, val body: String) {

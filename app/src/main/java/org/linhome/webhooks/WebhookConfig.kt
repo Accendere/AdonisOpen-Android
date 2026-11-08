@@ -50,8 +50,53 @@ enum class PollMode(val wireName: String) {
     }
 }
 
+/** How the app proves who it is to the receiver. */
+enum class WebhookAuth(val wireName: String) {
+    /** `Authorization: Bearer <token>` (Adonis). */
+    BEARER("bearer"),
+
+    /** No Authorization header, for a receiver that doesn't check (someone's own system). */
+    NONE("none");
+
+    companion object {
+        fun fromWireName(name: String?): WebhookAuth? = values().firstOrNull { it.wireName == name?.trim()?.lowercase() }
+    }
+}
+
+/** The event names the app knows (`webhook_events`). Unknown names in a link are ignored. */
+object WebhookEvents {
+    const val STATE = "state"
+    const val CALLS_PAUSED = "calls_paused"
+    const val CALLS_RESUMED = "calls_resumed"
+    const val CALL_RINGING = "call_ringing"
+    const val CALL_PREVIEW = "call_preview"
+    const val DOOR_ACTION = "door_action"
+    const val CALL_ANSWERED = "call_answered"
+    const val CALL_DECLINED = "call_declined"
+    const val CALL_ENDED = "call_ended"
+    const val CALL_SUMMARY = "call_summary"
+    const val REGISTRATION = "registration"
+    const val POLL = "poll"
+    const val POLL_FOREGROUND = "poll_foreground"
+
+    /** Not an event the site lists: the question the app asks when a call was answered elsewhere. */
+    const val WHO_ANSWERED = "who_answered"
+
+    val KNOWN = setOf(
+        STATE, CALLS_PAUSED, CALLS_RESUMED, CALL_RINGING, CALL_PREVIEW, DOOR_ACTION, CALL_ANSWERED,
+        CALL_DECLINED, CALL_ENDED, CALL_SUMMARY, REGISTRATION, POLL, POLL_FOREGROUND
+    )
+
+    /** Every `call_*` event and `door_action`: the ones a call produces. */
+    val CALL_EVENTS = setOf(CALL_RINGING, CALL_PREVIEW, DOOR_ACTION, CALL_ANSWERED, CALL_DECLINED, CALL_ENDED, CALL_SUMMARY)
+}
+
 /**
  * The site's webhook settings, as delivered by an `adonis://configure` link.
+ *
+ * [events] is what the site asked for (`webhook_events`); null for a link made before the list existed,
+ * which means exactly the old behaviour: `state`, and polling as [pollMode] says. With a list, [pollMode]
+ * comes from `poll` / `poll_foreground` in it.
  *
  * [token] is a secret like the SIP password: never log it. [toString] hides it.
  */
@@ -60,8 +105,19 @@ data class WebhookConfig(
     val user: String,
     val token: String,
     val pollMode: PollMode = PollMode.NEVER,
-    val pollingIntervalSeconds: Int = DEFAULT_POLLING_INTERVAL_SECONDS
+    val pollingIntervalSeconds: Int = DEFAULT_POLLING_INTERVAL_SECONDS,
+    val events: Set<String>? = null,
+    val auth: WebhookAuth = WebhookAuth.BEARER
 ) {
+    /** Whether the site asked for [event]. An event it didn't list is never sent. */
+    fun sends(event: String): Boolean = events?.contains(event) ?: (event == WebhookEvents.STATE)
+
+    /** Whether any event a call produces is wanted (also gates `who_answered`). */
+    val reportsCalls: Boolean get() = WebhookEvents.CALL_EVENTS.any { sends(it) }
+
+    /** The domain the events go to, for the import screen. */
+    val displayHost: String get() = host ?: baseUrl
+
     /** `<webhook_baseurl>/<event>`, without doubling the slash. */
     fun urlFor(event: String): String = baseUrl.trimEnd('/') + "/" + event
 
@@ -69,7 +125,7 @@ data class WebhookConfig(
     val host: String? get() = runCatching { URI(baseUrl).host?.lowercase() }.getOrNull()
 
     override fun toString(): String =
-        "WebhookConfig(baseUrl=$baseUrl, user=$user, token=<hidden>, pollMode=${pollMode.wireName}, pollingIntervalSeconds=$pollingIntervalSeconds)"
+        "WebhookConfig(baseUrl=$baseUrl, user=$user, token=<hidden>, auth=${auth.wireName}, events=${events?.sorted()}, pollMode=${pollMode.wireName}, pollingIntervalSeconds=$pollingIntervalSeconds)"
 
     companion object {
         const val MIN_POLLING_INTERVAL_SECONDS = 10
@@ -99,13 +155,34 @@ data class WebhookConfig(
                 lastRejectionReason = "webhook_baseurl must not contain a query, fragment or credentials"
                 return null
             }
+            val auth = if (root.has("webhook_auth")) {
+                WebhookAuth.fromWireName(root.optString("webhook_auth")) ?: run {
+                    lastRejectionReason = "webhook_auth is neither bearer nor none"
+                    return null
+                }
+            } else {
+                WebhookAuth.BEARER
+            }
             val user = root.optString("webhook_user", "").trim()
             val token = root.optString("webhook_token", "").trim()
-            if (user.isEmpty() || token.isEmpty()) {
+            if (user.isEmpty() || (auth == WebhookAuth.BEARER && token.isEmpty())) {
                 lastRejectionReason = "webhook_user or webhook_token is missing"
                 return null
             }
-            val pollMode = PollMode.fromLinkValue(if (root.has("use_webhook_to_poll")) root.opt("use_webhook_to_poll") else null)
+            val events = root.optJSONArray("webhook_events")?.let { array ->
+                (0 until array.length()).mapNotNull { array.optString(it, "").trim().lowercase().ifEmpty { null } }
+                    .filter { it in WebhookEvents.KNOWN }
+                    .toSet()
+            }
+            val pollMode = if (events != null) {
+                when {
+                    WebhookEvents.POLL in events -> PollMode.ALWAYS
+                    WebhookEvents.POLL_FOREGROUND in events -> PollMode.FOREGROUND_ONLY
+                    else -> PollMode.NEVER
+                }
+            } else {
+                PollMode.fromLinkValue(if (root.has("use_webhook_to_poll")) root.opt("use_webhook_to_poll") else null)
+            }
             val interval = if (root.has("polling_interval")) {
                 root.optInt("polling_interval", DEFAULT_POLLING_INTERVAL_SECONDS)
             } else {
@@ -116,7 +193,9 @@ data class WebhookConfig(
                 user = user,
                 token = token,
                 pollMode = pollMode,
-                pollingIntervalSeconds = interval.coerceAtLeast(MIN_POLLING_INTERVAL_SECONDS)
+                pollingIntervalSeconds = interval.coerceAtLeast(MIN_POLLING_INTERVAL_SECONDS),
+                events = events,
+                auth = auth
             )
         }
     }

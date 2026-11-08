@@ -26,7 +26,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 
 /** Whether the app may call the site's webhooks. */
 enum class WebhookStatus(val wireName: String) {
@@ -51,6 +54,12 @@ interface WebhookStorage {
 
     /** A random id made once on first use and kept for good (a new link doesn't reset it). */
     val deviceId: String
+
+    /** Events waiting to be sent, oldest first, each a JSON object `{"event", "fields", "at"}`. Survives a restart. */
+    var eventQueue: List<String>
+
+    /** Ids of poll messages handled but not yet acknowledged to the site. */
+    var pendingAcks: Set<String>
 }
 
 /** Log sink; messages never contain the token. */
@@ -74,7 +83,9 @@ class WebhookEngine(
     private val ioDispatcher: CoroutineDispatcher,
     private val logger: WebhookLog,
     private val onStatusChanged: (WebhookStatus) -> Unit = {},
-    private val onPollMessages: (List<JSONObject>) -> Unit = {}
+    private val onPollMessages: (List<JSONObject>) -> Unit = {},
+    private val appVersion: String? = null,
+    private val clock: () -> String = { OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) }
 ) {
     companion object {
         private const val TAG = "[Webhooks]"
@@ -83,11 +94,22 @@ class WebhookEngine(
         val RETRY_DELAYS_MS = longArrayOf(10_000, 30_000, 120_000, 600_000)
 
         fun retryDelayMs(attempt: Int): Long = RETRY_DELAYS_MS[attempt.coerceIn(0, RETRY_DELAYS_MS.size - 1)]
+
+        /** At most this many events wait; when full, the oldest is dropped. */
+        const val MAX_QUEUED_EVENTS = 200
+
+        /** How long `who_answered` may take before the app gives up (the site itself waits ~2 s). */
+        const val WHO_ANSWERED_TIMEOUT_MS = 4_000L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
     private var stateJob: Job? = null
     private var pollJob: Job? = null
+    private var eventsJob: Job? = null
+
+    /** True while a failed event send waits for its next try. */
+    var eventsWaitingForRetry: Boolean = false
+        private set
 
     /** The switch state that still has to reach the site, or null when the site has the latest one. */
     var pendingState: Boolean? = null
@@ -100,6 +122,11 @@ class WebhookEngine(
     private var foreground = false
 
     val status: WebhookStatus get() = storage.status
+
+    /** The settings in use, or null when the site gave none. */
+    val config: WebhookConfig? get() = storage.config
+
+    private fun meta(at: String? = clock()) = WebhookMeta(storage.deviceId, appVersion, at)
 
     private fun info(message: String) = logger.log(WebhookLog.Level.INFO, "$TAG $message")
     private fun warn(message: String) = logger.log(WebhookLog.Level.WARNING, "$TAG $message")
@@ -114,6 +141,7 @@ class WebhookEngine(
             setStatus(WebhookStatus.ACTIVE)
         }
         sendState(enabled)
+        flushEvents()
         updatePolling()
     }
 
@@ -132,6 +160,12 @@ class WebhookEngine(
         stateJob?.cancel()
         pendingState = null
         waitingForRetry = false
+        // Events and acks belonged to the previous settings (maybe another site or person): drop them.
+        eventsJob?.cancel()
+        eventsJob = null
+        eventsWaitingForRetry = false
+        storage.eventQueue = emptyList()
+        storage.pendingAcks = emptySet()
         if (config == null) {
             info("Setup link has no webhooks: calling nothing")
         } else {
@@ -143,10 +177,61 @@ class WebhookEngine(
 
     /** The network came back: resend a state whose last send failed, right away. */
     fun onNetworkAvailable() {
+        if (eventsWaitingForRetry) {
+            info("Network is back: resending queued events")
+            eventsJob?.cancel()
+            eventsJob = null
+            eventsWaitingForRetry = false
+            flushEvents()
+        }
         val state = pendingState ?: return
         if (waitingForRetry) {
             info("Network is back: resending state")
             sendState(state)
+        }
+    }
+
+    /**
+     * Queues [event] with its [fields] (merged over `user`, `device_id`, `platform`, `app_version`, `at`)
+     * when the site asked for it, and sends the queue in order. [at] defaults to now.
+     */
+    fun sendEvent(event: String, fields: JSONObject, at: String? = null) {
+        val config = storage.config ?: return
+        if (!config.sends(event) || storage.status != WebhookStatus.ACTIVE) return
+        val entry = JSONObject().put("event", event).put("fields", fields).put("at", at ?: clock())
+        val queue = storage.eventQueue.toMutableList()
+        queue += entry.toString()
+        while (queue.size > MAX_QUEUED_EVENTS) {
+            warn("Event queue full: dropping the oldest event")
+            queue.removeAt(0)
+        }
+        storage.eventQueue = queue
+        flushEvents()
+    }
+
+    /**
+     * Asks the site who answered a call this phone saw answered elsewhere. Null when the site doesn't say,
+     * doesn't want call events, or doesn't answer in time. Never changes the webhook status.
+     */
+    suspend fun whoAnswered(callId: String?, door: String?): String? {
+        val config = storage.config ?: return null
+        if (storage.status != WebhookStatus.ACTIVE || !config.reportsCalls) return null
+        val request = WebhookProtocol.whoAnsweredRequest(config, callId, door, meta())
+        val outcome = withTimeoutOrNull(WHO_ANSWERED_TIMEOUT_MS) {
+            withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }
+        }
+        if (outcome == null) {
+            info("who_answered: no answer in time")
+            return null
+        }
+        return when (outcome) {
+            is WebhookOutcome.Ok -> outcome.body?.let { body ->
+                if (body.isNull("answered_by")) null else body.optString("answered_by", "").trim().ifEmpty { null }
+            }
+            else -> {
+                info("who_answered: ${outcome.javaClass.simpleName}")
+                null
+            }
         }
     }
 
@@ -170,6 +255,7 @@ class WebhookEngine(
     fun shutdown() {
         stateJob?.cancel()
         pollJob?.cancel()
+        eventsJob?.cancel()
     }
 
     private fun canCall(): Boolean = storage.config != null && storage.status == WebhookStatus.ACTIVE
@@ -186,7 +272,83 @@ class WebhookEngine(
         pendingState = null
         waitingForRetry = false
         stateJob?.cancel()
+        eventsJob?.cancel()
+        eventsJob = null
+        eventsWaitingForRetry = false
         updatePolling()
+    }
+
+    /** Sends the queued events one by one, oldest first; a failure waits and retries the same one. */
+    private fun flushEvents() {
+        if (!canCall() || eventsJob?.isActive == true || storage.eventQueue.isEmpty()) return
+        eventsJob = scope.launch {
+            var attempt = 0
+            while (isActive) {
+                val config = storage.config ?: break
+                if (storage.status != WebhookStatus.ACTIVE) break
+                val head = storage.eventQueue.firstOrNull() ?: break
+                val entry = runCatching { JSONObject(head) }.getOrNull()
+                if (entry == null) {
+                    dropHead(head)
+                    continue
+                }
+                val event = entry.optString("event")
+                if (!config.sends(event)) {
+                    dropHead(head)
+                    continue
+                }
+                val request = WebhookProtocol.eventRequest(
+                    config, event, entry.optJSONObject("fields") ?: JSONObject(), meta(entry.optString("at").ifEmpty { null })
+                )
+                eventsWaitingForRetry = false
+                when (val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }) {
+                    is WebhookOutcome.Ok -> {
+                        info("Event $event sent")
+                        dropHead(head)
+                        attempt = 0
+                        continue
+                    }
+                    is WebhookOutcome.AppBug -> {
+                        error("Event $event rejected as a bug in the app: HTTP ${outcome.status} ${outcome.code ?: ""} ${outcome.message ?: ""}".trim())
+                        dropHead(head)
+                        attempt = 0
+                        continue
+                    }
+                    WebhookOutcome.Unauthorized -> {
+                        warn("Site answered 401 to $event: the person must scan their link again; stopping all calls")
+                        eventsJob = null
+                        stopAll(WebhookStatus.UNAUTHORIZED)
+                        return@launch
+                    }
+                    WebhookOutcome.NotFound -> {
+                        warn("Site answered 404 to $event: webhooks are off; stopping all calls until a new link")
+                        eventsJob = null
+                        stopAll(WebhookStatus.NOT_FOUND)
+                        return@launch
+                    }
+                    is WebhookOutcome.TooMany -> {
+                        val wait = maxOf(retryDelayMs(attempt), (outcome.retryAfterSeconds ?: 0) * 1000)
+                        warn("Site answered 429 to $event; retrying in ${wait / 1000} s")
+                        eventsWaitingForRetry = true
+                        delay(wait)
+                    }
+                    is WebhookOutcome.Retry -> {
+                        val wait = retryDelayMs(attempt)
+                        warn("Event $event not sent (${outcome.reason}); retrying in ${wait / 1000} s")
+                        eventsWaitingForRetry = true
+                        delay(wait)
+                    }
+                }
+                attempt++
+            }
+            eventsJob = null
+        }
+    }
+
+    private fun dropHead(head: String) {
+        val queue = storage.eventQueue.toMutableList()
+        if (queue.firstOrNull() == head) queue.removeAt(0) else queue.remove(head)
+        storage.eventQueue = queue
     }
 
     /**
@@ -202,7 +364,12 @@ class WebhookEngine(
             while (isActive) {
                 val config = storage.config ?: return@launch
                 if (storage.status != WebhookStatus.ACTIVE) return@launch
-                val request = WebhookProtocol.stateRequest(config, enabled, storage.deviceId)
+                val request = WebhookProtocol.stateRequest(config, enabled, meta())
+                if (request == null) {
+                    // The site listed neither calls_paused/calls_resumed nor state for this change.
+                    pendingState = null
+                    return@launch
+                }
                 waitingForRetry = false
                 val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }
                 when (outcome) {
@@ -256,15 +423,25 @@ class WebhookEngine(
         pollJob = scope.launch {
             while (isActive && shouldPoll()) {
                 val config = storage.config ?: return@launch
-                val request = WebhookProtocol.pollRequest(config, storage.deviceId)
+                val acks = storage.pendingAcks
+                val request = if (config.events == null && acks.isEmpty()) {
+                    WebhookProtocol.pollRequest(config, storage.deviceId)
+                } else {
+                    WebhookProtocol.pollRequest(config, storage.deviceId, acks, meta())
+                }
                 val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }
                 var wait = config.pollingIntervalSeconds * 1000L
                 when (outcome) {
                     is WebhookOutcome.Ok -> {
+                        if (acks.isNotEmpty()) storage.pendingAcks = storage.pendingAcks - acks
                         val array = outcome.body?.optJSONArray("messages")
                         val messages = (0 until (array?.length() ?: 0)).mapNotNull { array?.optJSONObject(it) }
                         if (messages.isNotEmpty()) {
                             info("Poll returned ${messages.size} message(s)")
+                            // Every message with an id is acknowledged in the next poll, whatever its type:
+                            // an unknown type is ignored, but acknowledged so the site stops re-sending it.
+                            val ids = messages.mapNotNull { it.optString("id", "").ifEmpty { null } }
+                            if (ids.isNotEmpty()) storage.pendingAcks = storage.pendingAcks + ids
                             onPollMessages(messages)
                         }
                     }

@@ -94,6 +94,12 @@ object Claims {
         scope.launch { client.confirm(claimUrl, deviceId) }
     }
 
+    /** The person dismissed a pushed setup: tell the site, so it stops offering it (retried like [confirm]). */
+    fun decline(context: Context, claimUrl: String) {
+        val deviceId = Webhooks.deviceId(context.applicationContext)
+        scope.launch { client.confirm(claimUrl, deviceId, declined = true) }
+    }
+
     /**
      * First launch with no account: if the clipboard holds a claim URL (put there by the site's
      * "Install and set up" button) that the site hasn't already answered for good, start it. Must be called while the activity

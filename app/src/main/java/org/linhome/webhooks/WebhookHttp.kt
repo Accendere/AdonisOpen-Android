@@ -63,30 +63,70 @@ fun interface WebhookTransport {
     fun send(request: WebhookRequest): HttpAnswer
 }
 
+/** What every call says about the phone: [at] is the moment of the event (ISO 8601 with offset). */
+data class WebhookMeta(val deviceId: String?, val appVersion: String?, val at: String?)
+
 object WebhookProtocol {
     const val PLATFORM = "android"
-    const val EVENT_STATE = "state"
+    const val EVENT_STATE = WebhookEvents.STATE
     const val EVENT_POLL = "poll"
 
-    private fun headers(config: WebhookConfig) = mapOf(
-        "Content-Type" to "application/json",
-        "Accept" to "application/json",
-        "Authorization" to "Bearer ${config.token}"
-    )
-
-    fun stateRequest(config: WebhookConfig, enabled: Boolean, deviceId: String?): WebhookRequest {
-        val body = JSONObject()
-            .put("user", config.user)
-            .put("enabled", enabled)
-            .put("platform", PLATFORM)
-        deviceId?.let { body.put("device_id", it) }
-        return WebhookRequest(config.urlFor(EVENT_STATE), body.toString(), headers(config))
+    private fun headers(config: WebhookConfig): Map<String, String> {
+        val headers = linkedMapOf(
+            "Content-Type" to "application/json",
+            "Accept" to "application/json"
+        )
+        if (config.auth == WebhookAuth.BEARER) headers["Authorization"] = "Bearer ${config.token}"
+        return headers
     }
 
-    fun pollRequest(config: WebhookConfig, deviceId: String?): WebhookRequest {
-        val body = JSONObject().put("user", config.user)
-        deviceId?.let { body.put("device_id", it) }
+    /** `user`, `device_id`, `platform`, `app_version`, `at`: the fields every call carries. */
+    fun commonBody(config: WebhookConfig, meta: WebhookMeta): JSONObject {
+        val body = JSONObject()
+            .put("user", config.user)
+            .put("platform", PLATFORM)
+        meta.deviceId?.let { body.put("device_id", it) }
+        meta.appVersion?.let { body.put("app_version", it) }
+        meta.at?.let { body.put("at", it) }
+        return body
+    }
+
+    /**
+     * The switch state, as the site asked for it: `calls_resumed` / `calls_paused` when it listed them
+     * (only the one it listed, if it listed one), else the old `state` with `enabled`. Null: nothing to send.
+     */
+    fun stateRequest(config: WebhookConfig, enabled: Boolean, meta: WebhookMeta): WebhookRequest? {
+        val event = if (enabled) WebhookEvents.CALLS_RESUMED else WebhookEvents.CALLS_PAUSED
+        return when {
+            config.sends(event) -> WebhookRequest(config.urlFor(event), commonBody(config, meta).put("enabled", enabled).toString(), headers(config))
+            config.sends(WebhookEvents.STATE) -> WebhookRequest(config.urlFor(WebhookEvents.STATE), commonBody(config, meta).put("enabled", enabled).toString(), headers(config))
+            else -> null
+        }
+    }
+
+    /** Old signature, kept for callers that only know the device id. */
+    fun stateRequest(config: WebhookConfig, enabled: Boolean, deviceId: String?): WebhookRequest =
+        stateRequest(config.copy(events = null), enabled, WebhookMeta(deviceId, null, null))!!
+
+    /** One event: [fields] are merged over the common ones. */
+    fun eventRequest(config: WebhookConfig, event: String, fields: JSONObject, meta: WebhookMeta): WebhookRequest {
+        val body = commonBody(config, meta)
+        fields.keys().forEach { key -> body.put(key, fields.get(key)) }
+        return WebhookRequest(config.urlFor(event), body.toString(), headers(config))
+    }
+
+    fun pollRequest(config: WebhookConfig, deviceId: String?, ack: Collection<String> = emptyList(), meta: WebhookMeta? = null): WebhookRequest {
+        val body = if (meta != null) commonBody(config, meta) else JSONObject().put("user", config.user).also { b -> deviceId?.let { b.put("device_id", it) } }
+        if (ack.isNotEmpty()) body.put("ack", org.json.JSONArray(ack.toList()))
         return WebhookRequest(config.urlFor(EVENT_POLL), body.toString(), headers(config))
+    }
+
+    /** `who_answered`: [callId] and [door] as the phone knows them. */
+    fun whoAnsweredRequest(config: WebhookConfig, callId: String?, door: String?, meta: WebhookMeta): WebhookRequest {
+        val body = commonBody(config, meta)
+        callId?.let { body.put("call_id", it) }
+        door?.let { body.put("door", it) }
+        return WebhookRequest(config.urlFor(WebhookEvents.WHO_ANSWERED), body.toString(), headers(config))
     }
 
     fun classify(answer: HttpAnswer): WebhookOutcome {

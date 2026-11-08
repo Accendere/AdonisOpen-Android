@@ -73,7 +73,7 @@ class MainActivity : GenericActivity() {
     var toobarButtonClickedListener: ToobarButtonClickedListener? = null
     lateinit var binding: ActivityMainBinding
     private var pendingAdonisConfig: org.linhome.utils.AdonisConfig? = null
-    private var currentAutoConfigDialog: androidx.appcompat.app.AlertDialog? = null
+    private var currentAutoConfigDialog: android.app.Dialog? = null
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -267,177 +267,54 @@ class MainActivity : GenericActivity() {
         val config = pendingAdonisConfig ?: return
         if (currentAutoConfigDialog?.isShowing == true) return
 
-        val dialogView = layoutInflater.inflate(R.layout.dialog_adonis_autoconfig, null)
-        val dialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(this, R.style.LindoorDialogTheme)
-            .setView(dialogView)
-            .setCancelable(true)
-            .setOnDismissListener {
+        val plan = org.linhome.utils.AdonisProvisioner.buildImportPlan(config)
+        val pushed = org.linhome.webhooks.PollMessages.wasPushed(this, config.claimUrl)
+        currentAutoConfigDialog = org.linhome.ui.importsettings.ImportSettingsScreen(
+            this, config, plan,
+            onApply = { selection ->
                 currentAutoConfigDialog = null
-            }
-            .create()
-
-        currentAutoConfigDialog = dialog
-
-        config.claimUrl?.let { claimUrl ->
-            dialogView.findViewById<android.widget.TextView>(R.id.dialog_subtitle).text =
-                Texts.get("adonis_claim_from", org.linhome.claim.ClaimContract.hostOf(claimUrl))
-        }
-
-        // Populate SIP details
-        val sipCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.sip_card)
-        val sipOverwriteWarning = dialogView.findViewById<android.widget.TextView>(R.id.sip_overwrite_warning)
-        if (config.sip != null) {
-            sipCard.visibility = View.VISIBLE
-            dialogView.findViewById<android.widget.TextView>(R.id.sip_username_text).text = config.sip.username
-            val domainDisplay = if (!config.sip.proxy.isNullOrBlank()) "${config.sip.domain} (via ${config.sip.proxy})" else config.sip.domain
-            dialogView.findViewById<android.widget.TextView>(R.id.sip_domain_text).text = domainDisplay
-            dialogView.findViewById<android.widget.TextView>(R.id.sip_transport_text).text = (config.sip.transport ?: "UDP").uppercase()
-            val existingAccount = LinhomeAccount.get()
-            if (existingAccount != null) {
-                val existingIdentity = existingAccount.params?.identityAddress?.asStringUriOnly() ?: "configured account"
-                sipOverwriteWarning.text = "⚠ Will overwrite existing SIP account ($existingIdentity)"
-                sipOverwriteWarning.visibility = View.VISIBLE
-            } else {
-                sipOverwriteWarning.visibility = View.GONE
-            }
-        } else {
-            sipCard.visibility = View.GONE
-        }
-
-        // Populate Remote Provisioning URL details
-        val remoteUrlCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.remote_url_card)
-        if (!config.remoteProvisioningUrl.isNullOrBlank()) {
-            remoteUrlCard.visibility = View.VISIBLE
-            val urlText = dialogView.findViewById<android.widget.TextView>(R.id.remote_url_text)
-            val warningText = dialogView.findViewById<android.widget.TextView>(R.id.remote_url_insecure_warning)
-            urlText.text = config.remoteProvisioningUrl
-            val isHttps = config.remoteProvisioningUrl.startsWith("https://", ignoreCase = true)
-            warningText.visibility = if (isHttps) View.GONE else View.VISIBLE
-        } else {
-            remoteUrlCard.visibility = View.GONE
-        }
-
-        // Populate Devices details (additive by default; overwrites require explicit approval)
-        val devicesCard = dialogView.findViewById<androidx.cardview.widget.CardView>(R.id.devices_card)
-        val devicesListLayout = dialogView.findViewById<android.widget.LinearLayout>(R.id.devices_list_layout)
-        val devicesHeader = dialogView.findViewById<android.widget.TextView>(R.id.devices_header_title)
-        val devicesAdditiveNote = dialogView.findViewById<android.widget.TextView>(R.id.devices_additive_note)
-        val checkboxOverwriteDevices = dialogView.findViewById<android.widget.CheckBox>(R.id.checkbox_overwrite_devices)
-        val applyButton = dialogView.findViewById<android.widget.Button>(R.id.btn_apply)
-
-        var newDeviceCount = 0
-        var existingConflictCount = 0
-
-        if (config.devices.isNotEmpty()) {
-            devicesCard.visibility = View.VISIBLE
-            devicesListLayout.removeAllViews()
-
-            for (dev in config.devices) {
-                val existingMatch = org.linhome.utils.AdonisProvisioner.findMatchingExistingDevice(dev, config.sip?.domain)
-                if (existingMatch != null) {
-                    existingConflictCount++
-                } else {
-                    newDeviceCount++
-                }
-
-                val row = android.widget.LinearLayout(this).apply {
-                    orientation = android.widget.LinearLayout.VERTICAL
-                    setPadding(0, 4, 0, 8)
-                }
-                val badgeText = if (existingMatch != null) " [EXISTS — OVERWRITE?]" else " [NEW]"
-                val nameView = android.widget.TextView(this).apply {
-                    text = "• ${dev.name}$badgeText"
-                    textSize = 14f
-                    setTextColor(
-                        if (existingMatch != null) android.graphics.Color.parseColor("#D97706")
-                        else androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_b)
-                    )
-                    setTypeface(null, android.graphics.Typeface.BOLD)
-                }
-                val addrView = android.widget.TextView(this).apply {
-                    val actStr = dev.actions.joinToString(", ") { "${it.type.replace("action_type_", "").replace("action_", "").replace("_", " ")}: ${it.code}" }
-                    val conflictNote = if (existingMatch != null) "\n   Matches existing '${existingMatch.name}' (${existingMatch.address})" else ""
-                    text = "   ${dev.address}  |  $actStr$conflictNote"
-                    textSize = 12f
-                    setTextColor(androidx.core.content.ContextCompat.getColor(this@MainActivity, R.color.color_g))
-                }
-                row.addView(nameView)
-                row.addView(addrView)
-                devicesListLayout.addView(row)
-            }
-
-            if (existingConflictCount > 0) {
-                devicesHeader.text = "DEVICES ($newDeviceCount NEW, $existingConflictCount EXISTING)"
-                devicesAdditiveNote.text = "New devices are added automatically. Existing matching devices will be kept untouched unless you approve overwriting them below."
-                checkboxOverwriteDevices.visibility = View.VISIBLE
-                checkboxOverwriteDevices.isChecked = false
-                checkboxOverwriteDevices.text = "Approve overwriting $existingConflictCount existing device(s)"
-            } else {
-                devicesHeader.text = "DEVICES TO ADD ($newDeviceCount NEW)"
-                devicesAdditiveNote.text = "New devices will be added to your existing list."
-                checkboxOverwriteDevices.visibility = View.GONE
-                checkboxOverwriteDevices.isChecked = false
-            }
-        } else {
-            devicesCard.visibility = View.GONE
-            checkboxOverwriteDevices.visibility = View.GONE
-            checkboxOverwriteDevices.isChecked = false
-        }
-
-        fun updateApplyButtonState() {
-            val hasAnythingToApply = config.sip != null ||
-                !config.remoteProvisioningUrl.isNullOrBlank() ||
-                newDeviceCount > 0 ||
-                (existingConflictCount > 0 && checkboxOverwriteDevices.isChecked)
-            applyButton.isEnabled = hasAnythingToApply
-            applyButton.alpha = if (hasAnythingToApply) 1.0f else 0.5f
-        }
-        checkboxOverwriteDevices.setOnCheckedChangeListener { _, _ ->
-            updateApplyButtonState()
-        }
-        updateApplyButtonState()
-
-        dialogView.findViewById<android.widget.Button>(R.id.btn_cancel).setOnClickListener {
-            dialog.dismiss()
-            pendingAdonisConfig = null
-            intent?.data = null
-            if (!LinhomeAccount.configured() && navController.currentDestination?.id != R.id.navigation_assistant_root) {
-                try {
-                    navController.navigate(R.id.navigation_assistant_root)
-                } catch (e: Exception) {
-                    Log.e("[MainActivity] Navigation to assistant root failed: $e")
-                }
-            }
-        }
-
-        applyButton.setOnClickListener {
-            val approveDeviceOverwrites = checkboxOverwriteDevices.isChecked
-            dialog.dismiss()
-            val configToApply = pendingAdonisConfig ?: config
-            pendingAdonisConfig = null
-            intent?.data = null
-            org.linhome.utils.AdonisProvisioner.applyConfig(
-                this,
-                configToApply,
-                overwriteExistingDevices = approveDeviceOverwrites
-            ) { success, _ ->
-                if (success) {
-                    configToApply.claimUrl?.let { org.linhome.claim.Claims.confirm(this, it) }
-                    try {
-                        if (navController.currentDestination?.id != R.id.navigation_devices) {
-                            navController.popBackStack(R.id.navigation_devices, false)
+                val configToApply = pendingAdonisConfig ?: config
+                pendingAdonisConfig = null
+                intent?.data = null
+                org.linhome.utils.AdonisProvisioner.applySelection(this, configToApply, selection) { success, _ ->
+                    if (success) {
+                        configToApply.claimUrl?.let {
+                            org.linhome.claim.Claims.confirm(this, it)
+                            org.linhome.webhooks.PollMessages.settled(this, it)
                         }
-                        tabBarLayoutClicked(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
-                        enterRootFragment()
-                        org.linhome.store.DeviceStore.mutableDevices?.postValue(org.linhome.store.DeviceStore.devices)
+                        try {
+                            if (navController.currentDestination?.id != R.id.navigation_devices) {
+                                navController.popBackStack(R.id.navigation_devices, false)
+                            }
+                            tabBarLayoutClicked(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
+                            enterRootFragment()
+                            org.linhome.store.DeviceStore.mutableDevices?.postValue(org.linhome.store.DeviceStore.devices)
+                        } catch (e: Exception) {
+                            Log.e("[MainActivity] Navigation error after autoconfig: $e")
+                        }
+                    }
+                }
+            },
+            onCancel = {
+                currentAutoConfigDialog = null
+                pendingAdonisConfig = null
+                intent?.data = null
+                // A pushed update the person dismissed: tell the site, so it stops offering it.
+                if (pushed) {
+                    config.claimUrl?.let {
+                        org.linhome.claim.Claims.decline(this, it)
+                        org.linhome.webhooks.PollMessages.settled(this, it)
+                    }
+                }
+                if (!LinhomeAccount.configured() && navController.currentDestination?.id != R.id.navigation_assistant_root) {
+                    try {
+                        navController.navigate(R.id.navigation_assistant_root)
                     } catch (e: Exception) {
-                        Log.e("[MainActivity] Navigation error after autoconfig: $e")
+                        Log.e("[MainActivity] Navigation to assistant root failed: $e")
                     }
                 }
             }
-        }
-
-        dialog.show()
+        ).show()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

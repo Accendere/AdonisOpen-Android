@@ -44,6 +44,7 @@ class NotificationBroadcastReceiver : BroadcastReceiver() {
         }
 
         if (intent.action == NotificationsManager.INTENT_HANGUP_CALL_NOTIF_ACTION) {
+            coreContext.markLocalHangup(call)
             if (call.state == Call.State.IncomingReceived || call.state == Call.State.IncomingEarlyMedia)
                 call.decline(Reason.Declined)
             else

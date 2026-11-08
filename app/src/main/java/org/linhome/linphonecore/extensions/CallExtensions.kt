@@ -95,6 +95,7 @@ fun Call.extendedAccept() {
     isCameraEnabled = false
 
     if (wasSilentlyAccepted && (state == Call.State.Connected || state == Call.State.StreamsRunning || state == Call.State.Updating || state == Call.State.UpdatedByRemote)) {
+        callLog?.callId?.let { coreContext.callReporter.onAnswered(it) }
         if (gsmActive) {
             coreContext.core.isMicEnabled = false
             setSpeakerMuted(true)

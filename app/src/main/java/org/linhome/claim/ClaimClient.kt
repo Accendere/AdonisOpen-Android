@@ -64,12 +64,12 @@ class ClaimClient(
      * answers; stops when it says the code is used/expired (already done) or bound to another phone.
      * Returns true when the site recorded it (or already had).
      */
-    suspend fun confirm(claimUrl: String, deviceId: String): Boolean {
+    suspend fun confirm(claimUrl: String, deviceId: String, declined: Boolean = false): Boolean {
         val host = ClaimContract.hostOf(claimUrl)
         var attempt = 0
         var waited = 0L
         while (true) {
-            val outcome = withContext(ioDispatcher) { ClaimContract.call(transport, ClaimContract.confirmRequest(claimUrl, deviceId)) }
+            val outcome = withContext(ioDispatcher) { ClaimContract.call(transport, ClaimContract.confirmRequest(claimUrl, deviceId, declined)) }
             when (outcome) {
                 is ClaimOutcome.Setup -> {
                     log(WebhookLog.Level.INFO, "Confirmed to $host")

@@ -113,7 +113,8 @@ object PairingContract {
                         pollUrl = pollUrl,
                         expiresInSeconds = json.optInt("expires_in", DEFAULT_EXPIRES_IN_SECONDS)
                             .takeIf { it > 0 }?.coerceAtMost(MAX_EXPIRES_IN_SECONDS) ?: DEFAULT_EXPIRES_IN_SECONDS,
-                        intervalSeconds = json.optInt("interval", DEFAULT_INTERVAL_SECONDS).coerceAtLeast(MIN_INTERVAL_SECONDS)
+                        intervalSeconds = json.optInt("interval", DEFAULT_INTERVAL_SECONDS).coerceAtLeast(MIN_INTERVAL_SECONDS),
+                        approvePath = approvePath(json.optString("approve_path", ""))
                     )
                 )
             }
@@ -159,6 +160,17 @@ data class DiscoveredSite(val name: String, val pairUrl: String) {
     val host: String get() = PairingContract.hostOf(pairUrl)
 }
 
+/**
+ * `approve_path`: a Home Assistant dashboard path (`/dashboard-porta/campainha`) where the code is approved.
+ * Only a plain absolute path is kept (letters, digits, `-`, `_`, `/`, `.`), never a URL: the app turns it
+ * into `homeassistant://navigate<path>`.
+ */
+fun approvePath(raw: String?): String? {
+    val path = raw?.trim().orEmpty()
+    if (path.isEmpty() || !path.startsWith("/") || path.startsWith("//") || path.length > 200) return null
+    return path.takeIf { Regex("^[A-Za-z0-9/_.-]+$").matches(it) && !it.contains("..") }
+}
+
 /** A pairing the site accepted and is waiting to approve. [pairingId] is a secret: hidden from toString(). */
 class PendingPairing(
     val site: DiscoveredSite,
@@ -166,7 +178,9 @@ class PendingPairing(
     val code: String,
     val pollUrl: String,
     val expiresInSeconds: Int,
-    val intervalSeconds: Int
+    val intervalSeconds: Int,
+    /** Where the code is approved in Home Assistant (see [approvePath]); null when the site didn't say. */
+    val approvePath: String? = null
 ) {
     override fun toString() = "PendingPairing(host=${site.host}, code=$code)"
 }

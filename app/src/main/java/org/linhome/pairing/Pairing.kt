@@ -260,17 +260,45 @@ object Pairing {
             })
             addView(progressView(a, Texts.get("pair_waiting")))
         }
-        codeDialog = MaterialAlertDialogBuilder(a, R.style.LindoorDialogTheme)
+        val haPackage = pairing.approvePath?.let { homeAssistantPackage(a) }
+        val builder = MaterialAlertDialogBuilder(a, R.style.LindoorDialogTheme)
             .setTitle(pairing.site.name)
             .setView(view)
             .setNegativeButton(android.R.string.cancel, null)
             .setCancelable(false)
-            .create()
+        if (haPackage != null) builder.setNeutralButton(Texts.get("pair_open_home_assistant"), null)
+        codeDialog = builder.create()
             .also { dialog ->
                 dialog.setOnDismissListener { if (codeDialog === dialog) cancelWaiting() }
                 dialog.show()
+                // Set after show() so the tap doesn't close the dialog: the wait goes on while the person
+                // approves in Home Assistant, and the hand-off happens when they come back.
+                if (haPackage != null) {
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+                        openHomeAssistant(a, haPackage, pairing.approvePath!!)
+                    }
+                }
             }
     }
+
+    /** The installed Home Assistant app's package (full or minimal build), or null. */
+    private fun homeAssistantPackage(a: MainActivity): String? =
+        HOME_ASSISTANT_PACKAGES.firstOrNull { pkg ->
+            runCatching { a.packageManager.getLaunchIntentForPackage(pkg) != null }.getOrDefault(false)
+        }
+
+    private fun openHomeAssistant(a: MainActivity, pkg: String, path: String) {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("homeassistant://navigate$path"))
+            .setPackage(pkg)
+        try {
+            a.startActivity(intent)
+        } catch (e: Exception) {
+            Log.w("[Pairing] Couldn't open Home Assistant: ${e.javaClass.simpleName}")
+            a.packageManager.getLaunchIntentForPackage(pkg)?.let { runCatching { a.startActivity(it) } }
+        }
+    }
+
+    private val HOME_ASSISTANT_PACKAGES = listOf("io.homeassistant.companion.android", "io.homeassistant.companion.android.minimal")
 
     private fun progressView(a: MainActivity, label: String) = LinearLayout(a).apply {
         orientation = LinearLayout.HORIZONTAL

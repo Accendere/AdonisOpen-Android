@@ -36,6 +36,8 @@ class WebhookEngineTest {
     private class MemoryStorage(override var config: WebhookConfig?) : WebhookStorage {
         override var status: WebhookStatus = WebhookStatus.ACTIVE
         override val deviceId: String = "device-1"
+        override var eventQueue: List<String> = emptyList()
+        override var pendingAcks: Set<String> = emptySet()
     }
 
     /** Answers with the queued statuses (then 200) and records every request. */

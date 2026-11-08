@@ -29,6 +29,9 @@ import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.MutableLiveData
 import kotlinx.coroutines.Dispatchers
+import org.json.JSONArray
+import org.json.JSONObject
+import org.linhome.BuildConfig
 import org.linphone.core.tools.Log
 import java.util.UUID
 
@@ -52,19 +55,26 @@ class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
                 token = token,
                 pollMode = PollMode.fromWireName(prefs.getString("poll_mode", null)),
                 pollingIntervalSeconds = prefs.getInt("polling_interval", WebhookConfig.DEFAULT_POLLING_INTERVAL_SECONDS)
-                    .coerceAtLeast(WebhookConfig.MIN_POLLING_INTERVAL_SECONDS)
+                    .coerceAtLeast(WebhookConfig.MIN_POLLING_INTERVAL_SECONDS),
+                events = prefs.getString("events", null)?.let { stored ->
+                    stored.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                },
+                auth = WebhookAuth.fromWireName(prefs.getString("auth", null)) ?: WebhookAuth.BEARER
             )
         }
         set(value) {
             val editor = prefs.edit()
             if (value == null) {
                 editor.remove("base_url").remove("user").remove("token").remove("poll_mode").remove("polling_interval")
+                    .remove("events").remove("auth")
             } else {
                 editor.putString("base_url", value.baseUrl)
                     .putString("user", value.user)
                     .putString("token", value.token)
                     .putString("poll_mode", value.pollMode.wireName)
                     .putInt("polling_interval", value.pollingIntervalSeconds)
+                    .putString("auth", value.auth.wireName)
+                if (value.events == null) editor.remove("events") else editor.putString("events", value.events.sorted().joinToString(","))
             }
             editor.apply()
         }
@@ -73,6 +83,24 @@ class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
         get() = WebhookStatus.fromWireName(prefs.getString("status", null))
         set(value) {
             prefs.edit().putString("status", value.wireName).apply()
+        }
+
+    override var eventQueue: List<String>
+        get() {
+            val stored = prefs.getString("event_queue", null) ?: return emptyList()
+            return runCatching {
+                val array = JSONArray(stored)
+                (0 until array.length()).map { array.getString(it) }
+            }.getOrDefault(emptyList())
+        }
+        set(value) {
+            prefs.edit().putString("event_queue", JSONArray(value).toString()).apply()
+        }
+
+    override var pendingAcks: Set<String>
+        get() = prefs.getStringSet("pending_acks", emptySet())?.toSet() ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet("pending_acks", value.toSet()).apply()
         }
 
     override val deviceId: String
@@ -105,7 +133,9 @@ object Webhooks {
                     WebhookLog.Level.ERROR -> Log.e(message)
                 }
             },
-            onStatusChanged = { status.postValue(it) }
+            onStatusChanged = { status.postValue(it) },
+            onPollMessages = { messages -> PollMessages.handle(application, messages) },
+            appVersion = BuildConfig.VERSION_NAME
         )
         engine = created
         status.value = storage.status
@@ -146,6 +176,18 @@ object Webhooks {
     fun deviceId(context: Context): String = SharedPreferencesWebhookStorage(context.applicationContext).deviceId
 
     fun onSwitchChanged(enabled: Boolean) = onMain { it.onSwitchChanged(enabled) }
+
+    /** The settings in use (for the import screen's comparison), or null. */
+    val config: WebhookConfig? get() = engine?.config
+
+    /** Queues [event] if the site asked for it (see [WebhookEngine.sendEvent]). Any thread. */
+    fun sendEvent(event: String, fields: JSONObject, at: String? = null) = onMain { it.sendEvent(event, fields, at) }
+
+    /** Whether the site wants [event]; false when nothing is configured. */
+    fun sends(event: String): Boolean = engine?.config?.sends(event) == true
+
+    /** See [WebhookEngine.whoAnswered]. */
+    suspend fun whoAnswered(callId: String?, door: String?): String? = engine?.whoAnswered(callId, door)
 
     fun onLinkApplied(config: WebhookConfig?, callsEnabled: Boolean) = onMain { it.onLinkApplied(config, callsEnabled) }
 

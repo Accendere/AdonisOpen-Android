@@ -281,6 +281,7 @@ class CallViewModel(val call: Call) : ViewModel() {
 
 
     fun decline() {
+        coreContext.markLocalHangup(call)
         if (call.state == Call.State.IncomingReceived ||
             call.state == Call.State.IncomingEarlyMedia ||
             call.state == Call.State.EarlyUpdating ||
@@ -293,10 +294,12 @@ class CallViewModel(val call: Call) : ViewModel() {
     }
 
     fun cancel() {
+        coreContext.markLocalHangup(call)
         call.terminate()
     }
 
     fun terminate() {
+        coreContext.markLocalHangup(call)
         call.terminate()
     }
 
@@ -358,6 +361,7 @@ class CallViewModel(val call: Call) : ViewModel() {
     }
 
     private fun executeActionNow(action: Action) {
+        coreContext.reportDoorAction(call, action)
         val actionMethodType = device.value?.let { d->
             d.actionsMethodType
         } ?: corePreferences.defaultActionsMethodType

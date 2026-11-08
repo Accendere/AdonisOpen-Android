@@ -32,6 +32,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.linhome.LinhomeApplication
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.compatibility.Compatibility
@@ -179,8 +180,22 @@ class CallIncomingActivity : CallGenericActivity() {
         binding.buttons.visibility = View.INVISIBLE
         binding.answeredElsewhereText.text = bannerText
         binding.answeredElsewhereCard.visibility = View.VISIBLE
+        val callId = callViewModel.call.callLog?.callId
         GlobalScope.launch(context = Dispatchers.Main) {
-            delay(3500)
+            val shownAt = System.currentTimeMillis()
+            // The site may say who answered (who_answered, asked by CoreContext when the call ended):
+            // show the name as soon as it comes, and keep the banner a little longer for it.
+            val lookup = callId?.let { coreContext.answeredByLookups[it] }
+            var named = false
+            if (lookup != null) {
+                val name = withTimeoutOrNull(4500) { runCatching { lookup.await() }.getOrNull() }
+                if (!name.isNullOrBlank() && !isFinishing) {
+                    binding.answeredElsewhereText.text = Texts.get("call_answered_elsewhere_by_banner", name)
+                    named = true
+                }
+            }
+            val elapsed = System.currentTimeMillis() - shownAt
+            delay(if (named) maxOf(3500 - elapsed, 2500) else (3500 - elapsed).coerceAtLeast(0))
             if (!isFinishing) {
                 finish()
             }

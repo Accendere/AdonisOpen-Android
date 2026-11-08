@@ -42,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -116,11 +117,81 @@ class CoreContext(
     val silentAcceptRemainingMs = MutableLiveData<Long>(0L)
     val lastCallStateMessage = HashMap<String, String>()
 
+    /** Narrates incoming calls as webhook events (only what the site listed leaves the phone). */
+    val callReporter = org.linhome.webhooks.CallReporter({ event, fields, at -> org.linhome.webhooks.Webhooks.sendEvent(event, fields, at) })
+    private val registrationReporter = org.linhome.webhooks.RegistrationReporter({ event, fields, at -> org.linhome.webhooks.Webhooks.sendEvent(event, fields, at) })
+
+    /** Calls this phone hung up or declined itself, so `call_ended` can say `by: local`. */
+    private val localHangups = HashSet<String>()
+
+    /** Who answered a call this phone saw answered elsewhere: the site's answer, per call id, while it is awaited. */
+    val answeredByLookups = HashMap<String, kotlinx.coroutines.Deferred<String?>>()
+
+    fun markLocalHangup(call: Call) {
+        call.callLog?.callId?.let { localHangups.add(it) }
+    }
+
+    /** The configured device name for the caller, else the caller's SIP user. */
+    fun doorNameFor(call: Call): String? =
+        DeviceStore.findDeviceByAddress(call.remoteAddress)?.name ?: call.remoteAddress?.username
+
+    /** Reports an action button press (before or during the call). */
+    fun reportDoorAction(call: Call, action: Action) {
+        callReporter.onDoorAction(
+            call.callLog?.callId, action.type, action.code,
+            early = isCallSilentlyAccepted(call), sent = action.code != null
+        )
+    }
+
+    private fun outcomeOf(call: Call, state: Call.State): org.linhome.webhooks.CallOutcome {
+        if (state == Call.State.Error) return org.linhome.webhooks.CallOutcome.FAILED
+        return when (call.callLog?.status) {
+            Call.Status.Success -> org.linhome.webhooks.CallOutcome.ANSWERED
+            Call.Status.Declined -> org.linhome.webhooks.CallOutcome.DECLINED
+            Call.Status.AcceptedElsewhere -> org.linhome.webhooks.CallOutcome.ANSWERED_ELSEWHERE
+            Call.Status.DeclinedElsewhere -> org.linhome.webhooks.CallOutcome.DECLINED_ELSEWHERE
+            Call.Status.Missed, Call.Status.Aborted, Call.Status.EarlyAborted -> org.linhome.webhooks.CallOutcome.MISSED
+            else -> org.linhome.webhooks.CallOutcome.MISSED
+        }
+    }
+
+    /** End of a narrated call: asks the site who answered when it was answered elsewhere, then reports. */
+    private fun reportCallEnded(call: Call, state: Call.State) {
+        val id = call.callLog?.callId ?: return
+        if (!callReporter.isTracking(id)) return
+        val outcome = outcomeOf(call, state)
+        val byLocal = localHangups.remove(id)
+        if (outcome == org.linhome.webhooks.CallOutcome.DECLINED && byLocal) callReporter.onDeclined(id)
+        val known: Boolean? = when (outcome) {
+            org.linhome.webhooks.CallOutcome.ANSWERED, org.linhome.webhooks.CallOutcome.FAILED -> byLocal.takeIf { it } ?: false
+            org.linhome.webhooks.CallOutcome.DECLINED -> true
+            org.linhome.webhooks.CallOutcome.MISSED, org.linhome.webhooks.CallOutcome.ANSWERED_ELSEWHERE,
+            org.linhome.webhooks.CallOutcome.DECLINED_ELSEWHERE -> false
+            else -> null
+        }
+        if (outcome == org.linhome.webhooks.CallOutcome.ANSWERED_ELSEWHERE &&
+            org.linhome.webhooks.Webhooks.config?.reportsCalls == true
+        ) {
+            val door = doorNameFor(call)
+            val lookup = coroutineScope.async { org.linhome.webhooks.Webhooks.whoAnswered(id, door) }
+            answeredByLookups[id] = lookup
+            coroutineScope.launch {
+                val name = runCatching { lookup.await() }.getOrNull()
+                callReporter.onEnded(id, outcome, known, name)
+                delay(30_000)
+                answeredByLookups.remove(id)
+            }
+        } else {
+            callReporter.onEnded(id, outcome, known)
+        }
+    }
+
     val coroutineScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     fun markCallSilentlyAccepted(call: Call) {
         val id = call.callLog?.callId ?: return
         silentlyAcceptedCallIds.add(id)
+        callReporter.onPreview(id)
         if (isVibrating) {
             Log.i("[Context] Stopping vibration on silent accept")
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -159,6 +230,7 @@ class CoreContext(
                 call.state != Call.State.Error
             ) {
                 Log.i("[Context] Auto-closing silently accepted call [$id] after timeout")
+                markLocalHangup(call)
                 call.terminate()
             }
         }
@@ -184,6 +256,7 @@ class CoreContext(
     }
 
     fun executeActionForCall(call: Call, action: Action) {
+        reportDoorAction(call, action)
         val device = DeviceStore.findDeviceByAddress(call.remoteAddress)
         val actionMethodType = device?.actionsMethodType ?: corePreferences.defaultActionsMethodType
         Log.i("[Context] Sending action DTMF/message: ${action.code} via $actionMethodType")
@@ -284,6 +357,19 @@ class CoreContext(
 
     private val listener: CoreListenerStub = object : CoreListenerStub() {
 
+        override fun onAccountRegistrationStateChanged(
+            core: Core,
+            account: org.linphone.core.Account,
+            state: RegistrationState,
+            message: String
+        ) {
+            when (state) {
+                RegistrationState.Failed -> registrationReporter.onFailed(message.ifBlank { null })
+                RegistrationState.Ok -> registrationReporter.onOk()
+                else -> {}
+            }
+        }
+
         override fun onPushNotificationReceived(core: Core, payload: String?) {
             org.linphone.core.tools.Log.i("[Context] Push notification received: $payload")
         }
@@ -307,16 +393,21 @@ class CoreContext(
                 call.callLog?.callId?.let { lastCallStateMessage[it] = message }
             }
             if (state == Call.State.IncomingReceived) {
+                val callId = call.callLog?.callId
                 if (!corePreferences.appEnabled) {
                     Log.i("[Context] App is disabled by user preference, declining incoming call")
+                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED) }
                     call.decline(Reason.TemporarilyUnavailable)
                     return
                 }
 
                 if (core.callsNb > 1) {
+                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_BUSY) }
                     call.decline(Reason.Busy)
                     return
                     }
+
+                callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), gsmCallActive = gsmCallActive()) }
 
                 if (gsmCallActive()) {
                     Log.w("[Context] Receiving a Linhome call while a GSM call is active")
@@ -385,11 +476,13 @@ class CoreContext(
                 }
 
                 if (!isCallSilentlyAccepted(call)) {
+                    call.callLog?.callId?.let { callReporter.onAnswered(it) }
                     onCallStarted(call)
                 } else {
                     Log.i("[Context] Call is silently accepted for pre-answer action, staying in incoming view")
                 }
             } else if (state == Call.State.End || state == Call.State.Error || state == Call.State.Released) {
+                if (state != Call.State.Released) reportCallEnded(call, state)
                 clearSilentlyAccepted(call)
                 if (core.callsNb == 0) {
                     if (isVibrating) {
@@ -501,11 +594,13 @@ class CoreContext(
 
     fun declineCall(call: Call) {
         Log.i("[Context] Declining call $call")
+        markLocalHangup(call)
         call.decline(Reason.Declined)
     }
 
     fun terminateCall(call: Call) {
         Log.i("[Context] Terminating call $call")
+        markLocalHangup(call)
         call.terminate()
     }
 

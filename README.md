@@ -74,8 +74,11 @@ Adonis Open supports instant auto-configuration from Home Assistant or external 
 
 ### Site Webhooks
 A setup link can also carry the site's webhooks (`webhook_baseurl`, `webhook_user`, `webhook_token`, `use_webhook_to_poll`, `polling_interval`). The contract is `docs/features/adonis-open-webhooks.md` in the Adonis repository; the code is in `app/src/main/java/org/linhome/webhooks/`.
-- **`state`**: the app tells the site whether its receive-calls switch is on: at start, after a link is applied, and whenever the switch changes. Failed sends retry with backoff (10 s, 30 s, 2 min, then every 10 min) and right away when the network comes back; only the latest state is sent.
-- **`poll`**: `use_webhook_to_poll` is `never`, `foreground_only` (while the app is on screen) or `always` (whenever the app's process runs). Older links with `true`/`false` mean `foreground_only`/`never`. Messages are not handled yet.
+- **Which events**: the link's `webhook_events` lists what the phone sends; anything not listed is never sent. Names: `calls_paused`, `calls_resumed`, `call_ringing`, `call_preview`, `door_action`, `call_answered`, `call_declined`, `call_ended`, `call_summary`, `registration`, `poll`, `poll_foreground`. A link without the list behaves as before (`state` plus `use_webhook_to_poll`). `webhook_auth` is `bearer` (default) or `none`, for receivers people run themselves.
+- **The switch** (`calls_paused` / `calls_resumed`, or the old `state`): at start, after a link is applied, and whenever it changes. Failed sends retry with backoff (10 s, 30 s, 2 min, then every 10 min) and right away when the network comes back; only the latest state is sent.
+- **Calls**: each step is an event sent right away (ringing, or refused because the switch was off or the phone busy; silent preview; every action button with its DTMF code, before or during the call, whatever the door does with it; answered; declined; ended), and `call_summary` narrates the whole call when it ends. The site picks granular events, the summary, or both. `registration` says when the SIP account starts failing and when it recovers. Events wait in a queue that survives restarts (at most 200) and are sent in order.
+- **Who answered**: when a call ends answered elsewhere, the app asks the site (`who_answered`) and the banner shows "answered by <name>".
+- **`poll`** (or `poll_foreground`: only while the app is on screen) every `polling_interval` seconds. Every message is acknowledged in the next poll (`ack`). `config_update` brings a claim link bound to this phone: a notification opens the import screen; dismissing it tells the site.
 - Only `https://` base URLs are used, redirects are never followed, and the token is kept in the app's private storage and never logged.
 - A link with a SIP account replaces the webhook settings (or clears them when it has none); a devices-only link leaves them alone.
 - If the site rejects the token (401), all calls stop and a banner asks the person to scan their new link.
@@ -93,6 +96,11 @@ With no link at all, the app can find its site on the local network. The contrac
 - `POST <url>/start` gives a 6-digit code, which the app shows; an administrator (or the person, in Home Assistant) approves it on the site. The app polls `poll_url` with the pairing id in the body; once approved it receives a claim URL and continues exactly as a claim link (fetch, dialog, confirm).
 - The poll URL and the claim URL must be on the announced host and port, and https; anything else is refused.
 - Discovery uses Android's `NsdManager` (no extra permission today). Android's upcoming local-network permission will need handling when the app targets an SDK that enforces it.
+
+### Importing Settings
+Every setup (link, claim, pairing, pushed update) opens a full-screen import page: a short summary on top with Apply, and "Show details and choose" listing the SIP account, each door, the webhooks (domain, authentication, polling, events) and remote provisioning, each with a checkbox. Each part is compared with what the phone has: the account says "no change", "new password" or which account it replaces; doors say new, unchanged or what changes. Only what changes is pre-selected. The code is in `app/src/main/java/org/linhome/ui/importsettings/` and `utils/ImportPlan.kt`.
+
+The pairing code dialog has an "Approve in Home Assistant" button when the site gives the approval page (`approve_path`) and the Home Assistant app is installed.
 
 ### Quick Settings & Widgets
 - **Quick Settings Tile**: Toggle "Receive Calls" on or off directly from the Android quick settings notification shade.
