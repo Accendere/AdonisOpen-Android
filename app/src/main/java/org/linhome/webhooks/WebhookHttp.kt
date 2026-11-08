@@ -126,7 +126,9 @@ object WebhookProtocol {
         val body = commonBody(config, meta)
         callId?.let { body.put("call_id", it) }
         door?.let { body.put("door", it) }
-        return WebhookRequest(config.urlFor(WebhookEvents.WHO_ANSWERED), body.toString(), headers(config))
+        // The site words "(other phone)" in the phone's language when it knows it.
+        val headers = headers(config) + ("Accept-Language" to java.util.Locale.getDefault().toLanguageTag())
+        return WebhookRequest(config.urlFor(WebhookEvents.WHO_ANSWERED), body.toString(), headers)
     }
 
     fun classify(answer: HttpAnswer): WebhookOutcome {
