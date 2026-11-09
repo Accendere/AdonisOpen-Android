@@ -25,7 +25,7 @@
         android:layout_width="300dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="33dp"
-        app:layout_constraintBottom_toTopOf="@id/create"
+        app:layout_constraintBottom_toTopOf="@id/scan"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/title"
@@ -34,34 +34,19 @@
 
 
     <org.linhome.ui.widgets.LRoundRectButton
-        android:id="@+id/sip"
+        android:id="@+id/scan"
         android:clickable="true"
         android:focusable="true"
         android:layout_width="320dp"
         android:layout_height="48dp"
         android:layout_marginTop="40dp"
-        app:layout_constraintBottom_toTopOf="@id/remote"
+        app:layout_constraintBottom_toTopOf="@id/find_site"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/subtitle"
         primary='@{true}'
-        text='@{"assistant_use_sip_account"}'
+        text='@{"scan_setup_code"}'
         />
-
-    <org.linhome.ui.widgets.LRoundRectButton
-        android:id="@+id/remote"
-        android:clickable="true"
-        android:focusable="true"
-        android:layout_width="320dp"
-        android:layout_height="48dp"
-        android:layout_marginTop="16dp"
-        app:layout_constraintBottom_toTopOf="@id/find_site"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/sip"
-        primary='@{false}'
-        text='@{"assistant_remote_prov"}'
-         />
 
     <org.linhome.ui.widgets.LRoundRectButton
         android:id="@+id/find_site"
@@ -70,14 +55,28 @@
         android:layout_width="320dp"
         android:layout_height="48dp"
         android:layout_marginTop="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/sip"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/remote"
+        app:layout_constraintTop_toBottomOf="@id/scan"
         primary='@{false}'
         text='@{"assistant_find_site_lan"}'
          />
 
+    <org.linhome.ui.widgets.LRoundRectButton
+        android:id="@+id/sip"
+        android:clickable="true"
+        android:focusable="true"
+        android:layout_width="320dp"
+        android:layout_height="48dp"
+        android:layout_marginTop="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/find_site"
+        primary='@{false}'
+        text='@{"assistant_enter_sip_manually"}'
+        />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

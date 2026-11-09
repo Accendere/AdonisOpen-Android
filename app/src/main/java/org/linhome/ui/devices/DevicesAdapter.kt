@@ -61,6 +61,10 @@ class SwipeToDeleteCallback(private var adapter: DevicesAdapter) :
         initiated = true
     }
 
+    // Only doors swipe away (not the "+" under the list).
+    override fun getSwipeDirs(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int =
+        if (viewHolder is DevicesAdapter.ViewHolder) super.getSwipeDirs(recyclerView, viewHolder) else 0
+
     override fun onMove(
         recyclerView: RecyclerView,
         viewHolder: RecyclerView.ViewHolder,

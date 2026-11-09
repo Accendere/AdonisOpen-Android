@@ -368,6 +368,9 @@ class CoreContext(
                 RegistrationState.Ok -> registrationReporter.onOk()
                 else -> {}
             }
+            if (account.params?.idkey != org.linhome.entities.LinhomeAccount.PUSH_GW_ID_KEY) {
+                RegistrationMonitor.onStateChanged(state, message.ifBlank { account.errorInfo?.phrase })
+            }
         }
 
         override fun onPushNotificationReceived(core: Core, payload: String?) {

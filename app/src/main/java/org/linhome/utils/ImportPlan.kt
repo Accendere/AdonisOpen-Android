@@ -75,23 +75,20 @@ data class WebhookImport(
 class ImportPlan(
     val sip: SipImport?,
     val devices: List<DeviceImport>,
-    val webhook: WebhookImport?,
-    val remoteProvisioningUrl: String?
+    val webhook: WebhookImport?
 ) {
     /** What is selected by default: everything that changes something, nothing that is unchanged. */
     fun defaultSelection() = ImportSelection(
         sip = sip != null && sip.change != ImportChange.UNCHANGED,
         devices = devices.filter { it.change != ImportChange.UNCHANGED }.map { it.index }.toSet(),
-        webhook = webhook != null && webhook.change != ImportChange.UNCHANGED,
-        remoteProvisioning = remoteProvisioningUrl != null
+        webhook = webhook != null && webhook.change != ImportChange.UNCHANGED
     )
 
     /** Nothing in this import would change the phone. */
     val nothingChanges: Boolean
         get() = (sip == null || sip.change == ImportChange.UNCHANGED) &&
             devices.all { it.change == ImportChange.UNCHANGED } &&
-            (webhook == null || webhook.change == ImportChange.UNCHANGED) &&
-            remoteProvisioningUrl == null
+            (webhook == null || webhook.change == ImportChange.UNCHANGED)
 
     companion object {
         private fun norm(value: String?): String = value?.trim()?.lowercase()?.removePrefix("sip:")?.removePrefix("sips:") ?: ""
@@ -163,8 +160,7 @@ class ImportPlan(
 data class ImportSelection(
     val sip: Boolean,
     val devices: Set<Int>,
-    val webhook: Boolean,
-    val remoteProvisioning: Boolean
+    val webhook: Boolean
 ) {
-    val isEmpty: Boolean get() = !sip && devices.isEmpty() && !webhook && !remoteProvisioning
+    val isEmpty: Boolean get() = !sip && devices.isEmpty() && !webhook
 }

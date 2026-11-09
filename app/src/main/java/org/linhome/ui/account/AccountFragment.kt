@@ -22,8 +22,6 @@
 package org.linhome.ui.account
 
 import android.content.DialogInterface
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -32,12 +30,18 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import org.linhome.LinhomeApplication
+import org.linhome.MainActivity
 import org.linhome.R
+import org.linhome.customisation.Theme
 import org.linhome.databinding.FragmentAccountBinding
 import org.linhome.entities.LinhomeAccount
 import org.linhome.utils.DialogUtil
+import org.linhome.utils.SiteInfo
 
-
+/**
+ * The Account screen: the account's summary, Edit account (the SIP form, saving in place), new settings from
+ * the site (scan, Wi-Fi), and Forget account. The password is changed in Edit account.
+ */
 class AccountFragment : Fragment() {
 
     private var accountViewModel: AccountViewModel? = null
@@ -57,40 +61,40 @@ class AccountFragment : Fragment() {
             model.refreshDescriptions()
         }
 
+        binding.editAccount.setOnClickListener {
+            findNavController().navigate(R.id.navigation_account_edit)
+        }
+
         binding.setupSip.setOnClickListener {
             findNavController().navigate(R.id.navigation_assistant_login_sip)
         }
 
-        binding.setupRemote.setOnClickListener {
-            findNavController().navigate(R.id.navigation_assistant_remote_root)
+        binding.scanSetupCode.setOnClickListener {
+            (requireActivity() as MainActivity).openScanner()
         }
 
-        binding.setupFindSite.setOnClickListener {
-            org.linhome.pairing.Pairing.searchFromButton(requireActivity() as org.linhome.MainActivity)
+        binding.findSite.setOnClickListener {
+            org.linhome.pairing.Pairing.searchFromButton(requireActivity() as MainActivity)
         }
 
-        binding.refreshRegisters.setOnClickListener {
-            model.refreshRegisters()
-        }
-
-        binding.changeLinhomePassword.setOnClickListener {
-            gotoFreeSip()
-        }
-
-        binding.deleteLinhomeAccount.setOnClickListener {
-            gotoFreeSip()
-        }
-
-        binding.disconnect.setOnClickListener {
+        Theme.roundRectButtonBackgroundStates("decline_call_button")?.also { binding.forgetAccount.background = it }
+        binding.forgetAccount.setOnClickListener {
             DialogUtil.confirm(
-                "menu_disconnect",
-                "disconnect_confirm_message",
+                "account_forget",
+                "account_forget_confirm",
                 { _: DialogInterface, _: Int ->
                     LinhomeAccount.disconnect()
-                    findNavController().navigateUp()
-                })
+                    SiteInfo.setName(LinhomeApplication.instance, null)
+                    org.linhome.linphonecore.RegistrationMonitor.reset(null)
+                    (requireActivity() as MainActivity).showDoors()
+                },
+                confirmTextKey = "account_forget"
+            )
         }
 
+        // The theme's text style sets the size on the first binding pass: make the account stand out after it.
+        binding.executePendingBindings()
+        binding.identity.textSize = 20f
 
         return binding.root
     }
@@ -98,16 +102,5 @@ class AccountFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         accountViewModel?.refreshDescriptions()
-    }
-
-    fun gotoFreeSip() {
-        DialogUtil.confirm(
-            "account_manage_on_freesip_title",
-            "account_manage_on_freesip_message",
-            { _: DialogInterface, _: Int ->
-                val browserIntent =
-                    Intent(Intent.ACTION_VIEW, Uri.parse(LinhomeApplication.corePreferences.config.getString("assistant","freesip_url","https://subscribe.linhome.org/login")))
-                startActivity(browserIntent)
-            })
     }
 }

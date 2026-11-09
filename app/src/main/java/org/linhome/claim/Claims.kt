@@ -53,8 +53,17 @@ object Claims {
     /** The clipboard is read at most once per app process. */
     private var clipboardChecked = false
 
-    /** Fetches the setup data behind [claimUrl] and shows the usual confirmation dialog. */
-    fun start(activity: MainActivity, claimUrl: String, onDefinitiveAnswer: () -> Unit = {}) {
+    /**
+     * Fetches the setup data behind [claimUrl] and shows the import screen. [source] and [siteName] are for
+     * its header (where the setup came from, the site's name when known).
+     */
+    fun start(
+        activity: MainActivity,
+        claimUrl: String,
+        source: org.linhome.utils.ImportSource? = null,
+        siteName: String? = null,
+        onDefinitiveAnswer: () -> Unit = {}
+    ) {
         if (inProgress) return
         inProgress = true
         val host = ClaimContract.hostOf(claimUrl)
@@ -77,13 +86,15 @@ object Claims {
                     if (config == null) {
                         showMessage(activity, Texts.get("claim_unreadable", host))
                     } else {
-                        activity.promptAdonisAutoConfig(config.copy(claimUrl = claimUrl))
+                        activity.promptAdonisAutoConfig(
+                            config.copy(claimUrl = claimUrl, source = source, siteName = siteName ?: config.siteName)
+                        )
                     }
                 }
                 ClaimOutcome.OtherDevice -> showMessage(activity, Texts.get("claim_other_device"))
                 ClaimOutcome.Expired -> showMessage(activity, Texts.get("claim_expired"))
                 is ClaimOutcome.TooMany, is ClaimOutcome.Unreachable ->
-                    showMessage(activity, Texts.get("claim_unreachable", host), retry = { start(activity, claimUrl, onDefinitiveAnswer) })
+                    showMessage(activity, Texts.get("claim_unreachable", host), retry = { start(activity, claimUrl, source, siteName, onDefinitiveAnswer) })
             }
         }
     }
@@ -122,7 +133,9 @@ object Claims {
         if (prefs.getString("last_clipboard_claim", null) == fingerprint) return
         Log.i("[Claim] Found a claim link for ${ClaimContract.hostOf(claimUrl)} in the clipboard")
         // Remembered only once the site answered for good, so a link tried while offline is tried again next launch.
-        start(activity, claimUrl) { prefs.edit().putString("last_clipboard_claim", fingerprint).apply() }
+        start(activity, claimUrl, org.linhome.utils.ImportSource.CLAIM_LINK) {
+            prefs.edit().putString("last_clipboard_claim", fingerprint).apply()
+        }
     }
 
     private fun sha256(value: String): String =

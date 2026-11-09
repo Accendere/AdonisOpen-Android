@@ -43,6 +43,7 @@ import org.linhome.entities.LinhomeAccount
 import org.linhome.webhooks.HttpUrlConnectionTransport
 import org.linhome.webhooks.WebhookLog
 import org.linhome.webhooks.Webhooks
+import org.linhome.utils.ImportSource
 import org.linphone.core.tools.Log
 import java.lang.ref.WeakReference
 
@@ -210,8 +211,9 @@ object Pairing {
                     // No screen to show the dialog on: the claim stays valid (48 h), keep it for the next attach.
                     Log.w("[Pairing] Approved while the app had no screen; the setup is fetched when it returns")
                     pendingClaim = outcome.claimUrl
+                    pendingSiteName = pairing.site.name
                 } else {
-                    Claims.start(a, outcome.claimUrl)
+                    Claims.start(a, outcome.claimUrl, ImportSource.LAN_PAIRING, pairing.site.name)
                 }
             }
             PollOutcome.Declined -> message(Texts.get("pair_declined"))
@@ -221,12 +223,15 @@ object Pairing {
 
     /** An approval that arrived while no activity was attached. */
     private var pendingClaim: String? = null
+    private var pendingSiteName: String? = null
 
     /** Called by MainActivity when it resumes, after [attach]. */
     fun resumePendingClaim(activity: MainActivity) {
         val claimUrl = pendingClaim ?: return
         pendingClaim = null
-        if (ClaimContract.validate(claimUrl) != null) Claims.start(activity, claimUrl)
+        val siteName = pendingSiteName
+        pendingSiteName = null
+        if (ClaimContract.validate(claimUrl) != null) Claims.start(activity, claimUrl, ImportSource.LAN_PAIRING, siteName)
     }
 
     private fun cancelWaiting() {

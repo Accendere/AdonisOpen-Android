@@ -146,7 +146,6 @@ class HistoryFragment : GenericFragment() {
             mainactivity.binding.appbar.toolbarRightButtonTitle.text = Texts.get("delete")
             mainactivity.toolbarViewModel.leftButtonVisible.value = true
             mainactivity.toolbarViewModel.rightButtonVisible.value = true
-            mainactivity.toolbarViewModel.burgerButtonVisible.value = false
             mainactivity.toolbarViewModel.backButtonVisible.value = false
             mainactivity.binding.appbar.contentmain.tabbar.visibility = View.GONE
         } else {
@@ -155,7 +154,6 @@ class HistoryFragment : GenericFragment() {
             mainactivity.binding.appbar.toolbarRightButtonTitle.text = Texts.get("clear_all")
             mainactivity.toolbarViewModel.leftButtonVisible.value = hasItems
             mainactivity.toolbarViewModel.rightButtonVisible.value = hasItems
-            mainactivity.toolbarViewModel.burgerButtonVisible.value = true
             mainactivity.toolbarViewModel.backButtonVisible.value = false
             mainactivity.binding.appbar.contentmain.tabbar.visibility = View.VISIBLE
             mainactivity.binding.appbar.toolbarRightButton.isEnabled = true
@@ -168,7 +166,6 @@ class HistoryFragment : GenericFragment() {
         updateToolbarButtons()
         coreContext.notificationsManager.dismissMissedCallNotification()
         binding.loglist.adapter?.notifyDataSetChanged()
-        mainactivity.tabBarLayoutClicked(mainactivity.binding.appbar.contentmain.tabbarHistory, mainactivity.binding.appbar.contentmain.tabbarDevices)
     }
 
     fun enterEdition() {

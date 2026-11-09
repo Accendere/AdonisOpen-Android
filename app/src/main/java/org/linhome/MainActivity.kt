@@ -25,9 +25,7 @@ import android.Manifest
 import android.content.DialogInterface
 import android.os.Build
 import android.os.Bundle
-import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.Window
 import android.view.WindowManager
 import androidx.annotation.RequiresApi
@@ -66,7 +64,6 @@ import permissions.dispatcher.RuntimePermissions
 class MainActivity : GenericActivity() {
 
     lateinit var navController: NavController
-    lateinit var navControllerSideMenu: NavController
     lateinit var toolbarViewModel: ToolbarViewModel
     lateinit var tabbarViewModel: TabbarViewModel
 
@@ -99,63 +96,22 @@ class MainActivity : GenericActivity() {
         setSupportActionBar(binding.appbar.toolbar)
 
         navController = findNavController(R.id.navigation_host_fragment)
-        navControllerSideMenu = findNavController(R.id.host_fragment_sidemenu)
 
         applyTheme()
 
-        binding.appbar.contentmain.tabbarDevices.setOnClickListener {
-            if (tabBarLayoutClicked(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)) {
-                navController.popBackStack()
-                navController.navigate(R.id.navigation_devices, null)
-            }
-        }
-        binding.appbar.contentmain.tabbarHistory.setOnClickListener {
-            if (tabBarLayoutClicked(binding.appbar.contentmain.tabbarHistory, binding.appbar.contentmain.tabbarDevices)) {
-                navController.popBackStack()
-                navController.navigate(R.id.navigation_history, null)
-            }
-        }
-        tabBarLayoutClicked(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
+        binding.appbar.contentmain.tabbarDevices.setOnClickListener { selectTab(R.id.navigation_devices) }
+        binding.appbar.contentmain.tabbarHistory.setOnClickListener { selectTab(R.id.navigation_history) }
+        binding.appbar.contentmain.tabbarSettings.setOnClickListener { selectTab(R.id.navigation_settings) }
+        styleTabs(R.id.navigation_devices)
 
         navController.addOnDestinationChangedListener { _, destination, _ ->
-            if (sideMenuOpened()) {
-                navControllerSideMenu.navigateUp()
-            }
-            when (destination.id) {
-                R.id.navigation_devices, R.id.navigation_history -> {
-                    enterRootFragment()
-                }
-                else -> {
-                    enterNonRootFragment()
-                }
+            if (destination.id in ROOT_DESTINATIONS) {
+                enterRootFragment()
+                styleTabs(destination.id)
+            } else {
+                enterNonRootFragment()
             }
             binding.appbar.toolbarTitle.text = titleForNavigationFragment(destination.id)
-        }
-
-        navControllerSideMenu.addOnDestinationChangedListener { _, destination, _ ->
-            when (destination.id) {
-                R.id.fragment_sidemenu -> {
-                    val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
-                    val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
-                    if (currentFragment is org.linhome.ui.history.HistoryFragment && currentFragment.isEditing) {
-                        currentFragment.exitEdition()
-                    }
-                    enterNonRootFragment()
-                    binding.appbar.toolbarTitle.text = null
-                }
-                else -> {
-                    enterRootFragment()
-                    binding.appbar.toolbarTitle.text =
-                        titleForNavigationFragment(navController.currentDestination?.id)
-                    if (navController.currentDestination?.id == R.id.navigation_history) {
-                        val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
-                        val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
-                        if (currentFragment is org.linhome.ui.history.HistoryFragment) {
-                            currentFragment.updateToolbarButtons()
-                        }
-                    }
-                }
-            }
         }
 
         binding.appbar.toolbarRightButton.setOnClickListener {
@@ -163,9 +119,6 @@ class MainActivity : GenericActivity() {
         }
         binding.appbar.toolbarLeftButton.setOnClickListener {
             toobarButtonClickedListener?.onToolbarLeftButtonClicked()
-        }
-        binding.appbar.toolbarBurgerButton.setOnClickListener {
-            onToolbarBurgerButtonClicked()
         }
         binding.appbar.toolbarBackButton.setOnClickListener {
             onToolbarBackButtonClicked()
@@ -181,9 +134,7 @@ class MainActivity : GenericActivity() {
         }
         updateToolbarCallsToggle()
 
-        binding.appbar.webhookRelinkBanner.setOnClickListener {
-            navController.navigate(R.id.navigation_assistant_remote_qr)
-        }
+        binding.appbar.webhookRelinkBanner.setOnClickListener { openScanner() }
         Webhooks.status.observe(this) { updateWebhookRelinkBanner(it) }
 
         LinhomeApplication.coreContext.closeAppUponCallFinish = false
@@ -196,12 +147,9 @@ class MainActivity : GenericActivity() {
             }
         }
 
-        if (!LinhomeAccount.configured() && pendingAdonisConfig == null && !claimStarted && (savedInstanceState == null || !savedInstanceState.getBoolean("ignored_no_account"))) {
-            navController.navigate(R.id.navigation_account)
-        }
-
-        if (savedInstanceState != null && savedInstanceState?.getBoolean("history_opened") == true) {
-            binding.appbar.contentmain.tabbarHistory.performClick()
+        if (!LinhomeAccount.configured() && pendingAdonisConfig == null && !claimStarted && savedInstanceState == null) {
+            // First run (or no account): the welcome screen with the setup choices.
+            navController.navigate(R.id.navigation_assistant_root)
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.appbar.contentmain.tabbar) { view, insets ->
@@ -234,17 +182,47 @@ class MainActivity : GenericActivity() {
      * anything else is a setup link parsed as before.
      */
     private fun handleAdonisUri(uri: android.net.Uri): Boolean {
+        // Who opened the link, for the import screen's header (Home Assistant, another app; null: ourselves).
+        val source = org.linhome.utils.ImportSource.fromReferrer(referrer?.toString(), packageName)
         if (uri.host.equals("claim", ignoreCase = true)) {
             val claimUrl = org.linhome.claim.ClaimContract.validate(uri.getQueryParameter("url"))
             if (claimUrl == null) {
                 Log.w("[MainActivity] Ignoring a claim link without a valid https URL")
                 return false
             }
-            org.linhome.claim.Claims.start(this, claimUrl)
+            org.linhome.claim.Claims.start(this, claimUrl, source ?: org.linhome.utils.ImportSource.CLAIM_LINK)
             return true
         }
-        pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)
+        pendingAdonisConfig = org.linhome.utils.AdonisProvisioner.parseUri(uri)?.copy(source = source)
+        if (pendingAdonisConfig == null) Log.w("[MainActivity] Ignoring an adonis:// link without setup data")
         return false
+    }
+
+    /** "Scan a setup code" (the scanner asks for the camera itself). */
+    fun openScanner() {
+        if (navController.currentDestination?.id != R.id.navigation_scan_setup_code) {
+            navController.navigate(R.id.navigation_scan_setup_code)
+        }
+    }
+
+    /** Goes back to the Doors tab, dropping whatever is above it. */
+    fun showDoors() {
+        try {
+            if (!navController.popBackStack(R.id.navigation_devices, false)) {
+                navController.navigate(R.id.navigation_devices)
+            }
+        } catch (e: Exception) {
+            Log.e("[MainActivity] Navigation to the doors failed: $e")
+        }
+    }
+
+    private fun selectTab(destination: Int) {
+        if (navController.currentDestination?.id == destination) return
+        val historyFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
+            ?.childFragmentManager?.fragments?.firstOrNull() as? org.linhome.ui.history.HistoryFragment
+        if (historyFragment?.isEditing == true) historyFragment.exitEdition()
+        navController.popBackStack(R.id.navigation_devices, false)
+        if (destination != R.id.navigation_devices) navController.navigate(destination)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -269,8 +247,9 @@ class MainActivity : GenericActivity() {
 
         val plan = org.linhome.utils.AdonisProvisioner.buildImportPlan(config)
         val pushed = org.linhome.webhooks.PollMessages.wasPushed(this, config.claimUrl)
+        val shown = if (pushed) config.copy(source = org.linhome.utils.ImportSource.SITE_UPDATE) else config
         currentAutoConfigDialog = org.linhome.ui.importsettings.ImportSettingsScreen(
-            this, config, plan,
+            this, shown, plan,
             onApply = { selection ->
                 currentAutoConfigDialog = null
                 val configToApply = pendingAdonisConfig ?: config
@@ -282,16 +261,8 @@ class MainActivity : GenericActivity() {
                             org.linhome.claim.Claims.confirm(this, it)
                             org.linhome.webhooks.PollMessages.settled(this, it)
                         }
-                        try {
-                            if (navController.currentDestination?.id != R.id.navigation_devices) {
-                                navController.popBackStack(R.id.navigation_devices, false)
-                            }
-                            tabBarLayoutClicked(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
-                            enterRootFragment()
-                            org.linhome.store.DeviceStore.mutableDevices?.postValue(org.linhome.store.DeviceStore.devices)
-                        } catch (e: Exception) {
-                            Log.e("[MainActivity] Navigation error after autoconfig: $e")
-                        }
+                        showDoors()
+                        org.linhome.store.DeviceStore.mutableDevices?.postValue(org.linhome.store.DeviceStore.devices)
                     }
                 }
             },
@@ -317,15 +288,9 @@ class MainActivity : GenericActivity() {
         ).show()
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putBoolean("ignored_no_account", navController.currentDestination?.id != R.id.navigation_account)
-        outState.putBoolean("history_opened", navController.currentDestination?.id == R.id.navigation_history)
-    }
 
     private fun enterNonRootFragment() {
         toolbarViewModel.backButtonVisible.value = true
-        toolbarViewModel.burgerButtonVisible.value = false
         toolbarViewModel.leftButtonVisible.value = false
         toolbarViewModel.rightButtonVisible.value = false
         binding.appbar.contentmain.tabbar.visibility = View.GONE
@@ -335,14 +300,13 @@ class MainActivity : GenericActivity() {
     private fun enterRootFragment() {
         binding.appbar.contentmain.tabbar.visibility = View.VISIBLE
         toolbarViewModel.backButtonVisible.value = false
-        toolbarViewModel.burgerButtonVisible.value = true
         toolbarViewModel.leftButtonVisible.value = false
         toolbarViewModel.rightButtonVisible.value = false
         updateToolbarCallsToggle()
     }
 
     fun updateToolbarCallsToggle() {
-        val isDevicesScreen = navController.currentDestination?.id == R.id.navigation_devices && !sideMenuOpened()
+        val isDevicesScreen = navController.currentDestination?.id == R.id.navigation_devices
         binding.appbar.toolbarCallsToggle.visibility = if (isDevicesScreen) View.VISIBLE else View.GONE
         if (!isDevicesScreen) return
 
@@ -410,99 +374,62 @@ class MainActivity : GenericActivity() {
 
 
     fun applyTheme() { //Todo move into bindings when validated
-        binding.drawerLayout.setBackgroundColor(Theme.getColor("color_f"))
-        binding.drawerLayout.setStatusBarBackgroundColor(Theme.getColor("color_c"))
+        binding.root.setBackgroundColor(Theme.getColor("color_f"))
         binding.appbar.toolbar.setBackgroundColor(Theme.getColor("color_c"))
         binding.appbar.contentmain.tabbar.setBackgroundColor(Theme.getColor("color_c"))
         binding.appbar.contentmain.unreadCount.backgroundTintList = Theme.buildSingleColorStateList("color_a")
         binding.appbar.progress.indeterminateTintList = Theme.buildSingleColorStateList("color_a")
         binding.appbar.progress.setBackgroundColor(Theme.getColor("color_i"))
-        if (binding.appbar.contentmain.tabbarHistory.isSelected) {
-            styleTabSelection(binding.appbar.contentmain.tabbarHistory, binding.appbar.contentmain.tabbarDevices)
-        } else {
-            styleTabSelection(binding.appbar.contentmain.tabbarDevices, binding.appbar.contentmain.tabbarHistory)
-        }
+        styleTabs(navController.currentDestination?.id?.takeIf { it in ROOT_DESTINATIONS } ?: R.id.navigation_devices)
         updateToolbarCallsToggle()
         applyCommonTheme()
     }
 
-    private fun styleTabSelection(active: ViewGroup, inactive: ViewGroup) {
-        active.background = Theme.roundRectInputBackgroundWithColorKeyAndRadius(
-            "color_i",
-            "round_rect_button_corner_radius"
+    /** Highlights the tab of [destination] (Doors, History or Settings). */
+    private fun styleTabs(destination: Int) {
+        val c = binding.appbar.contentmain
+        val tabs = listOf(
+            Triple(c.tabbarDevices, c.iconDevices, c.textDevices) to R.id.navigation_devices,
+            Triple(c.tabbarHistory, c.iconHistory, c.textHistory) to R.id.navigation_history,
+            Triple(c.tabbarSettings, c.iconSettings, c.textSettings) to R.id.navigation_settings
         )
-        inactive.background = null
-        val isDevicesActive = active.id == R.id.tabbar_devices
-        binding.appbar.contentmain.iconDevices.imageTintList =
-            Theme.buildSingleColorStateList(if (isDevicesActive) "color_a" else "color_g")
-        binding.appbar.contentmain.textDevices.setTextColor(
-            Theme.getColor(if (isDevicesActive) "color_a" else "color_g")
-        )
-        binding.appbar.contentmain.iconHistory.imageTintList =
-            Theme.buildSingleColorStateList(if (!isDevicesActive) "color_a" else "color_g")
-        binding.appbar.contentmain.textHistory.setTextColor(
-            Theme.getColor(if (!isDevicesActive) "color_a" else "color_g")
-        )
-        Theme.alphAnimate(active, 1f)
-        Theme.alphAnimate(inactive, 0.85f)
-    }
-
-    fun tabBarLayoutClicked(clicked: ViewGroup, unclicked: ViewGroup): Boolean {
-        if (clicked.isSelected)
-            return false
-        clicked.isSelected = true
-        unclicked.isSelected = false
-        styleTabSelection(clicked, unclicked)
-        return true
-    }
-
-
-    override fun onBackPressed() {
-        if (navControllerSideMenu.currentDestination?.id == R.id.fragment_sidemenu) {
-            navControllerSideMenu.navigateUp()
-        } else {
-            val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
-            val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
-            if (currentFragment is org.linhome.ui.history.HistoryFragment && currentFragment.isEditing) {
-                currentFragment.exitEdition()
-                return
-            }
-            super.onBackPressed()
+        for ((views, id) in tabs) {
+            val (tab, icon, label) = views
+            val active = id == destination
+            tab.isSelected = active
+            tab.background = if (active) Theme.roundRectInputBackgroundWithColorKeyAndRadius(
+                "color_i",
+                "round_rect_button_corner_radius"
+            ) else null
+            icon.imageTintList = Theme.buildSingleColorStateList(if (active) "color_a" else "color_g")
+            label.setTextColor(Theme.getColor(if (active) "color_a" else "color_g"))
+            Theme.alphAnimate(tab, if (active) 1f else 0.85f)
         }
     }
 
-    private fun onToolbarBurgerButtonClicked() {
-        navControllerSideMenu.navigate(R.id.open_side_menu, null)
-
+    override fun onBackPressed() {
+        val navHostFragment = supportFragmentManager.findFragmentById(R.id.navigation_host_fragment)
+        val currentFragment = navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
+        if (currentFragment is org.linhome.ui.history.HistoryFragment && currentFragment.isEditing) {
+            currentFragment.exitEdition()
+            return
+        }
+        super.onBackPressed()
     }
 
     private fun onToolbarBackButtonClicked() {
-        if (sideMenuOpened()) {
-            navControllerSideMenu.navigateUp()
-        } else
-            navController.navigateUp()
-    }
-
-
-    fun sideMenuOpened(): Boolean {
-        return navControllerSideMenu.currentDestination?.id != R.id.fragment_empty
+        navController.navigateUp()
     }
 
     private fun titleForNavigationFragment(fragmentId: Int?): String? {
         return when (fragmentId) {
             R.id.navigation_assistant_root,
-            R.id.navigation_assistant_create_linhome,
-            R.id.navigation_assistant_login_linhome,
-            R.id.navigation_assistant_login_sip,
-            R.id.navigation_assistant_remote_root,
-            R.id.navigation_assistant_remote_qr,
-            R.id.navigation_assistant_remote_url -> Texts.get("assistant")
-            R.id.navigation_devices, R.id.navigation_device_edit, R.id.navigation_device_info -> Texts.get(
-                "devices"
-            )
-            R.id.navigation_history -> Texts.get("history")
-            R.id.navigation_about -> Texts.get("about")
-            R.id.navigation_settings -> Texts.get("settings")
+            R.id.navigation_assistant_login_sip -> Texts.get("assistant")
+            R.id.navigation_scan_setup_code -> Texts.get("scan_setup_code")
+            R.id.navigation_account_edit -> Texts.get("account_edit")
+            R.id.navigation_devices, R.id.navigation_device_edit, R.id.navigation_device_info -> Texts.get("tab_doors")
+            R.id.navigation_history -> Texts.get("tab_history")
+            R.id.navigation_settings -> Texts.get("tab_settings")
             R.id.navigation_account -> Texts.get("menu_account")
             else -> null
         }
@@ -620,23 +547,6 @@ class MainActivity : GenericActivity() {
     }
 
 
-    override fun dispatchTouchEvent(event: MotionEvent?): Boolean {
-        if (sideMenuOpened()) {
-            if (event != null) {
-                val overFlowPct =
-                    if (LinhomeApplication.instance.smartPhone()) 0.75
-                    else if (LinhomeApplication.instance.landcape()) 0.3
-                    else 0.5
-
-                if (event.x.toInt() > overFlowPct * window.decorView.width) {
-                    navControllerSideMenu.navigateUp()
-                    return false
-                }
-            }
-        }
-        return super.dispatchTouchEvent(event)
-    }
-
     override fun onResume() {
         super.onResume()
         if (pendingAdonisConfig != null) {
@@ -661,5 +571,10 @@ class MainActivity : GenericActivity() {
     /** True while the "Import Configuration" dialog is up or waiting to be shown. */
     val autoConfigPending: Boolean
         get() = pendingAdonisConfig != null || currentAutoConfigDialog?.isShowing == true
+
+    companion object {
+        /** The bottom bar's tabs: Doors, History, Settings. */
+        val ROOT_DESTINATIONS = setOf(R.id.navigation_devices, R.id.navigation_history, R.id.navigation_settings)
+    }
 
 }

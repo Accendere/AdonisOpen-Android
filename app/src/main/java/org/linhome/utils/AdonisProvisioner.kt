@@ -71,30 +71,19 @@ data class AdonisSipConfig(
 data class AdonisConfig(
     val sip: AdonisSipConfig? = null,
     val devices: List<AdonisDeviceConfig> = emptyList(),
-    val remoteProvisioningUrl: String? = null,
     /** The site's webhooks; null when the link has none (then the app calls nothing). */
     val webhook: WebhookConfig? = null,
     /** Set when the config came from a claim link: confirmed to the site once applied. Never log it. */
-    val claimUrl: String? = null
+    val claimUrl: String? = null,
+    /** The site's display name when known (LAN pairing's announcement, or the setup's optional `site_name`). */
+    val siteName: String? = null,
+    /** Where the setup came from, for the import screen's header; null when unknown. */
+    val source: ImportSource? = null
 )
 
 object AdonisProvisioner {
 
     private const val TAG = "[AdonisProvisioner]"
-
-    fun isAdonisConfig(input: String?): Boolean {
-        if (input.isNullOrBlank()) return false
-        val trimmed = input.trim()
-        if (trimmed.startsWith("adonis://", ignoreCase = true)) return true
-        if (trimmed.startsWith("{") && (trimmed.contains("\"sip\"") || trimmed.contains("\"username\"") || trimmed.contains("\"devices\""))) {
-            return true
-        }
-        val decoded = tryDecodeBase64(trimmed)
-        if (decoded != null && decoded.startsWith("{") && (decoded.contains("\"sip\"") || decoded.contains("\"username\"") || decoded.contains("\"devices\""))) {
-            return true
-        }
-        return false
-    }
 
     private fun tryDecodeBase64(raw: String): String? {
         val clean = raw.trim().replace("\n", "").replace("\r", "")
@@ -156,19 +145,7 @@ object AdonisProvisioner {
             }
         }
 
-        // Check for remote XML provisioning URL: adonis://configure?url=...
-        val remoteUrl = uri.getQueryParameter("url") ?: uri.getQueryParameter("xml")
-        if (!remoteUrl.isNullOrBlank()) {
-            val trimmedUrl = remoteUrl.trim()
-            val parsedUrl = try { Uri.parse(trimmedUrl) } catch (_: Exception) { null }
-            val scheme = parsedUrl?.scheme?.lowercase()
-            if (scheme == "https" || scheme == "http") {
-                return AdonisConfig(remoteProvisioningUrl = trimmedUrl)
-            } else {
-                Log.w("$TAG Rejected remote provisioning URL with unsupported scheme: $scheme")
-                return null
-            }
-        }
+        // A link with only url= / xml= (Linhome's XML provisioning) is not supported: nothing below matches it.
 
         // Direct query parameters: adonis://configure?user=...&pass=...&domain=...
         val user = uri.getQueryParameter("user") ?: uri.getQueryParameter("username")
@@ -275,21 +252,14 @@ object AdonisProvisioner {
                 }
             }
 
-            val remoteUrl = root.optString("url").ifEmpty { root.optString("xml") }.trim()
-            val validRemoteUrl = if (remoteUrl.isNotEmpty()) {
-                val parsedUrl = try { Uri.parse(remoteUrl) } catch (_: Exception) { null }
-                val scheme = parsedUrl?.scheme?.lowercase()
-                if (scheme == "https" || scheme == "http") remoteUrl else null
-            } else null
-
             val webhook = WebhookConfig.fromLinkJson(root)
             WebhookConfig.lastRejectionReason?.let { Log.w("$TAG Ignoring the link's webhooks: $it") }
 
             AdonisConfig(
                 sip = sipConfig,
                 devices = devicesList,
-                remoteProvisioningUrl = validRemoteUrl,
-                webhook = webhook
+                webhook = webhook,
+                siteName = root.optString("site_name").trim().take(80).ifEmpty { null }
             )
         } catch (e: Exception) {
             Log.e("$TAG Error parsing JSON config: $e")
@@ -385,7 +355,7 @@ object AdonisProvisioner {
             )
         }
         val webhook = ImportPlan.compareWebhook(config.webhook, Webhooks.config, linkHasSip = config.sip != null)
-        return ImportPlan(sip, devices, webhook, config.remoteProvisioningUrl?.takeIf { it.isNotBlank() })
+        return ImportPlan(sip, devices, webhook)
     }
 
     /** Applies the parts of [config] that [selection] keeps (the import screen). */
@@ -405,19 +375,7 @@ object AdonisProvisioner {
     ) {
         GlobalScope.launch(Dispatchers.Main) {
             try {
-                // Case 1: Remote XML Provisioning URL
-                if (!config.remoteProvisioningUrl.isNullOrBlank() && (selection == null || selection.remoteProvisioning)) {
-                    Log.i("$TAG Starting remote provisioning with URL: ${config.remoteProvisioningUrl}")
-                    coreContext.core.provisioningUri = config.remoteProvisioningUrl
-                    coreContext.core.stop()
-                    coreContext.core.start()
-                    val msg = "Remote provisioning applied"
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    onComplete?.invoke(true, msg)
-                    return@launch
-                }
-
-                // Case 2: SIP Account Configuration (always overwrites existing account once approved)
+                // SIP account Configuration (always overwrites existing account once approved)
                 var sipConfigured = false
                 config.sip?.takeIf { selection == null || selection.sip }?.let { sip ->
                     Log.i("$TAG Configuring SIP account for ${sip.username}@${sip.domain}")
@@ -477,6 +435,8 @@ object AdonisProvisioner {
                         core.defaultAccount = account
                         account.refreshRegister()
                         sipConfigured = true
+                        SiteInfo.setName(context, config.siteName)
+                        org.linhome.linphonecore.RegistrationMonitor.reset(account.state)
 
                         if (LinhomeAccount.pushGateway() != null) {
                             LinhomeAccount.linkProxiesWithPushAccount(androidx.lifecycle.MutableLiveData())
@@ -496,7 +456,7 @@ object AdonisProvisioner {
                     Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
                 }
 
-                // Case 3: Device(s) Configuration (additive by default; overwrites only if explicitly approved)
+                // Device(s) Configuration (additive by default; overwrites only if explicitly approved)
                 var devicesAddedCount = 0
                 var devicesUpdatedCount = 0
                 var devicesSkippedCount = 0
@@ -556,16 +516,6 @@ object AdonisProvisioner {
                 Toast.makeText(context, errorMsg, Toast.LENGTH_LONG).show()
                 onComplete?.invoke(false, errorMsg)
             }
-        }
-    }
-
-    fun provisionFromRaw(raw: String, context: Context, onComplete: ((Boolean, String) -> Unit)? = null): Boolean {
-        val cfg = parse(raw)
-        return if (cfg != null) {
-            applyConfig(context, cfg, overwriteExistingDevices = false, onComplete = onComplete)
-            true
-        } else {
-            false
         }
     }
 

@@ -30,6 +30,7 @@ import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.R
+import org.linhome.customisation.Texts
 import org.linhome.databinding.FragmentAssistantLoginSipBinding
 import org.linhome.entities.LinhomeAccount
 import org.linhome.ui.assistant.shared.CreatorAssistantFragment
@@ -56,6 +57,11 @@ class LoginSipAccountFragment : CreatorAssistantFragment() {
             model.moreOptionsOpened.value = true
         }
 
+        if (arguments?.getBoolean("edit") == true) {
+            setUpEditing(binding, model)
+            return binding.root
+        }
+
         binding.loginsip.setOnClickListener {
             model.accountCreator.reset()
             binding.username.validate()
@@ -80,6 +86,8 @@ class LoginSipAccountFragment : CreatorAssistantFragment() {
         }
         model.pushReady.observe(viewLifecycleOwner, Observer { pushready ->
             hideProgress()
+            // Set up by hand: no site name to show on the account card.
+            org.linhome.utils.SiteInfo.setName(requireContext(), null)
             if (pushready) {
                 DialogUtil.info("sip_account_created")
                 mainactivity.navController.popBackStack(R.id.navigation_devices, false)
@@ -109,5 +117,41 @@ class LoginSipAccountFragment : CreatorAssistantFragment() {
 
 
         return binding.root
+    }
+
+    /**
+     * Account > Edit account: the form prefilled with the current account, saved in place (not removed and
+     * created again, so the doors, the history and the webhooks stay). An empty password keeps the current one.
+     */
+    private fun setUpEditing(binding: FragmentAssistantLoginSipBinding, model: LoginSipAccountViewModel) {
+        if (!model.prefilled) model.prefillFromCurrentAccount()
+        // Static texts are bound once, on the first pass: run it now so ours stay. The transport control's
+        // default (TLS) clicks itself on that pass: select the account's transport again afterwards.
+        val transport = model.transport.value ?: 0
+        binding.executePendingBindings()
+        binding.transport.defaultSelected = transport.coerceIn(0, 2)
+        binding.title.text = Texts.get("account_edit")
+        binding.loginsip.buttonText.text = Texts.get("account_save")
+        binding.password.hint = "account_password_keep_hint"
+        binding.password.validator = null
+        binding.loginsip.setOnClickListener {
+            binding.username.validate()
+            binding.domain.validate()
+            binding.proxy.validate()
+            binding.expiration.validate()
+            val typed = model.pass1.first.value
+            if (!typed.isNullOrEmpty()) updateField(model.setPassword(model.pass1), binding.password)
+            if (!(model.username.second.value!! && model.domain.second.value!! && model.expiration.second.value!! &&
+                    (typed.isNullOrEmpty() || model.pass1.second.value!!))) return@setOnClickListener
+            hideKeyboard()
+            when (model.saveEdits(typed)) {
+                LoginSipAccountViewModel.EditResult.SAVED -> {
+                    DialogUtil.toast("account_saved")
+                    mainactivity.navController.navigateUp()
+                }
+                LoginSipAccountViewModel.EditResult.NEED_PASSWORD -> binding.password.setError(Texts.get("account_password_needed"))
+                LoginSipAccountViewModel.EditResult.INVALID -> DialogUtil.error("account_save_failed")
+            }
+        }
     }
 }

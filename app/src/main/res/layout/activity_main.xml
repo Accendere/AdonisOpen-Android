@@ -6,14 +6,11 @@
         <variable name="tabbarviewmodel" type="org.linhome.ui.tabbar.TabbarViewModel" />
     </data>
 
-    <androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
-        xmlns:tools="http://schemas.android.com/tools"
-        android:id="@+id/drawer_layout"
+    <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        android:id="@+id/main_root"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fitsSystemWindows="true"
-        tools:openDrawer="start"
-        >
+        android:fitsSystemWindows="true">
 
     <include
         android:id="@+id/appbar"
@@ -26,6 +23,5 @@
 
         />
 
-
-</androidx.drawerlayout.widget.DrawerLayout>
+    </FrameLayout>
 </layout>

@@ -43,6 +43,7 @@ import org.linhome.utils.DeviceImport
 import org.linhome.utils.ImportChange
 import org.linhome.utils.ImportPlan
 import org.linhome.utils.ImportSelection
+import org.linhome.utils.ImportSource
 import org.linhome.webhooks.PollMode
 
 /**
@@ -60,7 +61,6 @@ class ImportSettingsScreen(
     private var sip = plan.defaultSelection().sip
     private val devices = plan.defaultSelection().devices.toMutableSet()
     private var webhook = plan.defaultSelection().webhook
-    private var remote = plan.defaultSelection().remoteProvisioning
 
     private lateinit var dialog: Dialog
     private lateinit var applyButton: Button
@@ -69,7 +69,7 @@ class ImportSettingsScreen(
     private fun dp(value: Int) = (value * activity.resources.displayMetrics.density).toInt()
     private fun color(id: Int) = ContextCompat.getColor(activity, id)
 
-    private fun selection() = ImportSelection(sip, devices.toSet(), webhook, remote)
+    private fun selection() = ImportSelection(sip, devices.toSet(), webhook)
 
     fun show(): Dialog {
         dialog = Dialog(activity, R.style.LinhomeTheme)
@@ -83,6 +83,7 @@ class ImportSettingsScreen(
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(4), dp(20), dp(20))
         }
+        content.addView(context())
         summary = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         content.addView(summary)
         fillSummary()
@@ -106,10 +107,32 @@ class ImportSettingsScreen(
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), 0, 0, 0)
-            addView(text(Texts.get("import_title"), 20f, bold = true))
+            val site = ImportSource.siteLabel(
+                config.siteName,
+                config.claimUrl?.let { ClaimContract.hostOf(it) },
+                config.webhook?.displayHost,
+                config.sip?.domain
+            )
+            addView(text(site?.let { Texts.get("import_title_from_site", it) } ?: Texts.get("import_title"), 20f, bold = true))
             val from = config.claimUrl?.let { Texts.get("adonis_claim_from", ClaimContract.hostOf(it)) }
-            from?.let { addView(text(it, 13f, secondary = true)) }
+            from?.takeIf { config.siteName != null }?.let { addView(text(it, 13f, secondary = true)) }
         })
+    }
+
+    /** Why this screen opened, and that nothing changes until Apply (people opening a link from another app may not expect it). */
+    private fun context(): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = dp(12).toFloat()
+            setColor(color(R.color.color_f))
+        }
+        val why = config.source?.let { Texts.get(it.textKey) }
+        val line = listOfNotNull(why, Texts.get("import_nothing_until_apply")).joinToString(" ")
+        addView(text(line, 14f))
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = dp(8)
+        }
     }
 
     // ---------- summary ----------
@@ -153,7 +176,6 @@ class ImportSettingsScreen(
             }
             summary.addView(bullet(line))
         }
-        plan.remoteProvisioningUrl?.let { summary.addView(bullet(Texts.get("import_remote_summary", it), warn = !it.startsWith("https://", true))) }
     }
 
     private fun eventCount(w: org.linhome.webhooks.WebhookConfig): Int = w.events?.size ?: 1
@@ -223,12 +245,6 @@ class ImportSettingsScreen(
                     }
                 })
             }
-        }
-        plan.remoteProvisioningUrl?.let { url ->
-            container.addView(sectionTitle(Texts.get("import_section_remote")))
-            val lines = mutableListOf<String>()
-            if (!url.startsWith("https://", true)) lines += Texts.get("import_remote_insecure")
-            container.addView(check(url, lines, remote, true) { remote = it; updateApply() })
         }
         return LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL

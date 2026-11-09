@@ -28,20 +28,27 @@ import android.view.ViewGroup
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
+import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import org.linhome.GenericFragment
 import org.linhome.LinhomeApplication
+import org.linhome.R
 import org.linhome.databinding.FragmentDevicesBinding
 import org.linhome.entities.Device
+import org.linhome.entities.LinhomeAccount
+import org.linhome.linphonecore.RegistrationMonitor
 import org.linhome.store.DeviceStore
 import org.linhome.utils.DialogUtil
 import org.linphone.mediastream.Log
 
+/** The Doors tab: the account card, then the doors with a "+" under the last one. */
 class DevicesFragment : GenericFragment() {
 
     private lateinit var devicesViewModel: DevicesViewModel
     private lateinit var binding: FragmentDevicesBinding
+    private lateinit var devicesAdapter: DevicesAdapter
+    private lateinit var footer: AddDoorFooterAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -55,27 +62,28 @@ class DevicesFragment : GenericFragment() {
         binding.lifecycleOwner = this
         binding.model = devicesViewModel
 
-        binding.newDevice.setOnClickListener {
-            binding.newDevice.visibility = View.INVISIBLE
-            val actionDetail = DevicesFragmentDirections.deviceNew()
-            mainactivity.navController.navigate(actionDetail)
+        binding.accountCard.actions = object : AccountCardView.Actions {
+            override fun openAccount() = mainactivity.navController.navigate(R.id.navigation_account)
+            override fun scanSetupCode() = mainactivity.openScanner()
+            override fun findSiteOnWifi() = org.linhome.pairing.Pairing.searchFromButton(mainactivity)
+            override fun enterSipAccount() = mainactivity.navController.navigate(R.id.navigation_assistant_login_sip)
         }
-
-        binding.newDeviceNoneConfigured?.setOnClickListener {
-            binding.newDeviceNoneConfigured?.visibility = View.INVISIBLE
-            val actionDetail = DevicesFragmentDirections.deviceNew()
-            mainactivity.navController.navigate(actionDetail)
-        }
+        RegistrationMonitor.snapshot.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
+        LinhomeAccount.appEnabledLiveData.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
 
         binding.deviceList.layoutManager =
             LinearLayoutManager(activity, RecyclerView.VERTICAL, false)
 
-        binding.deviceList.adapter = DevicesAdapter(
+        devicesAdapter = DevicesAdapter(
             devicesViewModel.devices,
             binding.deviceList,
             devicesViewModel.selectedDevice,
             this
         )
+        footer = AddDoorFooterAdapter {
+            mainactivity.navController.navigate(DevicesFragmentDirections.deviceNew())
+        }
+        binding.deviceList.adapter = ConcatAdapter(devicesAdapter, footer)
 
         if (LinhomeApplication.instance.smartPhone()) {
             devicesViewModel.selectedDevice.observe(viewLifecycleOwner, Observer { device ->
@@ -102,7 +110,8 @@ class DevicesFragment : GenericFragment() {
 
         devicesViewModel.devices.observe(viewLifecycleOwner, { devices ->
             Log.i("[DevicesFragment] $devices ")
-            (binding.deviceList.adapter as RecyclerView.Adapter).notifyDataSetChanged()
+            devicesAdapter.notifyDataSetChanged()
+            footer.empty = devices.isEmpty()
             binding.swiperefresh?.isRefreshing = false
         })
 
@@ -127,19 +136,10 @@ class DevicesFragment : GenericFragment() {
     override fun onResume() {
         super.onResume()
         devicesViewModel.devices.value = DeviceStore.devices
-        (binding.deviceList.adapter as? RecyclerView.Adapter)?.notifyDataSetChanged()
+        devicesAdapter.notifyDataSetChanged()
+        footer.empty = DeviceStore.devices.isEmpty()
         binding.invalidateAll()
-        if (LinhomeApplication.instance.tablet()) {
-            if (devicesViewModel.devices.value!!.size == 0) {
-                binding.newDevice.visibility = View.GONE
-                binding.newDeviceNoneConfigured?.visibility = View.VISIBLE
-            } else {
-                binding.newDevice.visibility = View.VISIBLE
-                binding.newDeviceNoneConfigured?.visibility = View.GONE
-            }
-        } else {
-            binding.newDevice.visibility = View.VISIBLE
-        }
+        binding.accountCard.refresh()
         binding.swiperefresh?.isEnabled = DeviceStore.serverFriendList != null
     }
 

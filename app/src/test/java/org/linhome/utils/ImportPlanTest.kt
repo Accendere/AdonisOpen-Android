@@ -69,7 +69,7 @@ class ImportPlanTest {
         val match = CurrentDevice("Porta", "sip:porta@sip.example", null, "method_dtmf_rfc_4733", listOf("action_open_door" to "7*"))
         val d = ImportPlan.compareDevice(0, door, match, fmt, "method_dtmf_rfc_4733", listOf("action_open_door" to "7*"))
         assertEquals(ImportChange.UNCHANGED, d.change)
-        val plan = ImportPlan(null, listOf(d), null, null)
+        val plan = ImportPlan(null, listOf(d), null)
         assertTrue(plan.defaultSelection().devices.isEmpty())
         assertTrue(plan.nothingChanges)
     }
@@ -80,7 +80,7 @@ class ImportPlanTest {
         val d = ImportPlan.compareDevice(0, door, match, fmt, "method_dtmf_rfc_4733", listOf("action_open_door" to "7*"))
         assertEquals(ImportChange.CHANGED, d.change)
         assertEquals(listOf("method", "actions"), d.differences)
-        assertEquals(setOf(0), ImportPlan(null, listOf(d), null, null).defaultSelection().devices)
+        assertEquals(setOf(0), ImportPlan(null, listOf(d), null).defaultSelection().devices)
     }
 
     private val hook = WebhookConfig("https://site.example/h", "pedro", "tok", events = setOf("call_summary"))
@@ -97,7 +97,7 @@ class ImportPlanTest {
 
     @Test
     fun emptySelection() {
-        assertTrue(ImportSelection(false, emptySet(), false, false).isEmpty)
-        assertFalse(ImportSelection(false, setOf(1), false, false).isEmpty)
+        assertTrue(ImportSelection(false, emptySet(), false).isEmpty)
+        assertFalse(ImportSelection(false, setOf(1), false).isEmpty)
     }
 }

@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layout xmlns:android="http://schemas.android.com/apk/res/android">
+<!-- The Settings tab: the settings in cards (Calls, Appearance, History, Advanced, Diagnostics, About) that open
+     and close by tapping their header. SettingsFragment styles the cards and wires the headers. -->
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:bind="http://schemas.android.com/apk/res-auto">
     <data>
         <import type="org.linhome.customisation.Texts"/>
         <import type="android.view.View"/>
@@ -10,141 +13,201 @@
             name="view"
             type="org.linhome.ui.settings.SettingsFragment"/>
         <variable
+            name="coreContext"
+            type="org.linhome.linphonecore.CoreContext" />
+        <variable
             name="subsection"
             type="Boolean" />
     </data>
 
     <ScrollView
         android:layout_width="match_parent"
-        backgoundcolor='@{"color_c"}'
+        backgoundcolor='@{"color_f"}'
         android:layout_height="match_parent">
 
     <LinearLayout
+        android:id="@+id/cards"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="24dp"
         android:orientation="vertical">
 
-        <include
-            layout="@layout/settings_widget_spinner"
-            title='@{model.getText("settings_theme_title")}'
-            listener="@{model.themeListener}"
-            selectedIndex="@{model.themeIndex}"
-            labels="@{model.themeLabels}"/>
-
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("settings_app_enabled")}'
-            listener="@{model.appEnabledListener}"
-            checked="@={model.appEnabled}"/>
-
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("settings_save_call_videos")}'
-            listener="@{model.saveCallVideosListener}"
-            checked="@={model.saveCallVideos}"/>
-
-        <include
-            layout="@layout/settings_widget_spinner"
-            title='@{model.getText("settings_history_retention_intercom")}'
-            listener="@{model.intercomRetentionListener}"
-            selectedIndex="@{model.intercomRetentionIndex}"
-            labels="@{model.retentionLabels}"/>
-
-        <include
-            layout="@layout/settings_widget_spinner"
-            title='@{model.getText("settings_history_retention_voice")}'
-            listener="@{model.voiceRetentionListener}"
-            selectedIndex="@{model.voiceRetentionIndex}"
-            labels="@{model.retentionLabels}"/>
-
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("settings_notify_answered_elsewhere")}'
-            listener="@{model.notifyAnsweredElsewhereListener}"
-            checked="@={model.notifyAnsweredElsewhere}"/>
-
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("settings_auto_close_timer_enabled")}'
-            listener="@{model.autoCloseTimerEnabledListener}"
-            checked="@={model.autoCloseTimerEnabled}"/>
-
-        <include
-            layout="@layout/settings_widget_spinner"
-            title='@{model.getText("settings_auto_close_timer_duration")}'
-            listener="@{model.autoCloseDurationListener}"
-            selectedIndex="@{model.autoCloseDurationIndex}"
-            labels="@{model.autoCloseDurationLabels}"/>
-
-        <org.linhome.ui.widgets.LExpandableSettingsSection
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            title='@{"audio_codecs"}'
-            entries="@{model.audioCodecs}"/>
-
-        <org.linhome.ui.widgets.LExpandableSettingsSection
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            title='@{"video_codecs"}'
-            entries="@{model.videCodecs}"/>
-
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("enable_ipv6")}'
-            listener="@{model.enableIpv6Listener}"
-            checked="@={model.enableIpv6}"/>
-
-        <include
-            layout="@layout/settings_widget_spinner"
-            title='@{model.getText("media_encryption")}'
-            listener="@{model.encryptionListener}"
-            selectedIndex="@{model.encryptionIndex}"
-            labels="@{model.encryptionLabels}"/>
-
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("enable_debuglogs")}'
-            listener="@{model.enableDebugLogsListener}"
-            checked="@={model.enableDebugLogs}"/>
-
+        <!-- Calls -->
         <LinearLayout
-            android:id="@+id/debug_log_options"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="@{model.enableDebugLogs ? View.VISIBLE : View.GONE}"
-            android:orientation="vertical">
+            android:id="@+id/card_calls"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_calls" layout="@layout/settings_card_header" title='@{model.getText("settings_card_calls")}' />
+            <LinearLayout android:id="@+id/body_calls" style="@style/SettingsCardBody">
 
-            <include
-                layout="@layout/settings_widget_basic"
-                title='@{model.getText("clear_logs")}'
-                listener="@{view.clearLogsListener}"
-                subsection="@{true}"
-                />
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("settings_app_enabled")}'
+                    listener="@{model.appEnabledListener}"
+                    checked="@={model.appEnabled}"/>
 
-            <include
-                android:id="@+id/send_logs"
-                layout="@layout/settings_widget_basic"
-                title='@{model.getText("send_logs")}'
-                listener="@{view.sendLogsListener}"
-                subsection="@{true}"
-                />
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("settings_notify_answered_elsewhere")}'
+                    listener="@{model.notifyAnsweredElsewhereListener}"
+                    checked="@={model.notifyAnsweredElsewhere}"/>
 
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("settings_auto_close_timer_enabled")}'
+                    listener="@{model.autoCloseTimerEnabledListener}"
+                    checked="@={model.autoCloseTimerEnabled}"/>
+
+                <include
+                    layout="@layout/settings_widget_spinner"
+                    title='@{model.getText("settings_auto_close_timer_duration")}'
+                    listener="@{model.autoCloseDurationListener}"
+                    selectedIndex="@{model.autoCloseDurationIndex}"
+                    labels="@{model.autoCloseDurationLabels}"/>
+
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("settings_device_show_latest_snapshot")}'
+                    listener="@{model.showLatestSnapshot}"
+                    checked="@={model.latestSnapshotShown}"/>
+
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("settings_save_call_videos")}'
+                    listener="@{model.saveCallVideosListener}"
+                    checked="@={model.saveCallVideos}"/>
+
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("settings_background_mode")}'
+                    listener="@{model.enableBackgroundMode}"
+                    checked="@={model.backgroundModeEnabled}"/>
+            </LinearLayout>
         </LinearLayout>
 
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("settings_device_show_latest_snapshot")}'
-            listener="@{model.showLatestSnapshot}"
-            checked="@={model.latestSnapshotShown}"/>
+        <!-- Appearance -->
+        <LinearLayout
+            android:id="@+id/card_appearance"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_appearance" layout="@layout/settings_card_header" title='@{model.getText("settings_card_appearance")}' />
+            <LinearLayout android:id="@+id/body_appearance" style="@style/SettingsCardBody">
+                <include
+                    layout="@layout/settings_widget_spinner"
+                    title='@{model.getText("settings_theme_title")}'
+                    listener="@{model.themeListener}"
+                    selectedIndex="@{model.themeIndex}"
+                    labels="@{model.themeLabels}"/>
+            </LinearLayout>
+        </LinearLayout>
 
-        <include
-            layout="@layout/settings_widget_switch"
-            title='@{model.getText("settings_background_mode")}'
-            listener="@{model.enableBackgroundMode}"
-            checked="@={model.backgroundModeEnabled}"/>
+        <!-- History -->
+        <LinearLayout
+            android:id="@+id/card_history"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_history" layout="@layout/settings_card_header" title='@{model.getText("settings_card_history")}' />
+            <LinearLayout android:id="@+id/body_history" style="@style/SettingsCardBody">
+                <include
+                    layout="@layout/settings_widget_spinner"
+                    title='@{model.getText("settings_history_retention_intercom")}'
+                    listener="@{model.intercomRetentionListener}"
+                    selectedIndex="@{model.intercomRetentionIndex}"
+                    labels="@{model.retentionLabels}"/>
 
+                <include
+                    layout="@layout/settings_widget_spinner"
+                    title='@{model.getText("settings_history_retention_voice")}'
+                    listener="@{model.voiceRetentionListener}"
+                    selectedIndex="@{model.voiceRetentionIndex}"
+                    labels="@{model.retentionLabels}"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Advanced -->
+        <LinearLayout
+            android:id="@+id/card_advanced"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_advanced" layout="@layout/settings_card_header" title='@{model.getText("settings_card_advanced")}' />
+            <LinearLayout android:id="@+id/body_advanced" style="@style/SettingsCardBody">
+                <org.linhome.ui.widgets.LExpandableSettingsSection
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    title='@{"audio_codecs"}'
+                    entries="@{model.audioCodecs}"/>
+
+                <org.linhome.ui.widgets.LExpandableSettingsSection
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    title='@{"video_codecs"}'
+                    entries="@{model.videCodecs}"/>
+
+                <include
+                    layout="@layout/settings_widget_spinner"
+                    title='@{model.getText("media_encryption")}'
+                    listener="@{model.encryptionListener}"
+                    selectedIndex="@{model.encryptionIndex}"
+                    labels="@{model.encryptionLabels}"/>
+
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("enable_ipv6")}'
+                    listener="@{model.enableIpv6Listener}"
+                    checked="@={model.enableIpv6}"/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Diagnostics -->
+        <LinearLayout
+            android:id="@+id/card_diagnostics"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_diagnostics" layout="@layout/settings_card_header" title='@{model.getText("settings_card_diagnostics")}' />
+            <LinearLayout android:id="@+id/body_diagnostics" style="@style/SettingsCardBody">
+                <include
+                    layout="@layout/settings_widget_switch"
+                    title='@{model.getText("enable_debuglogs")}'
+                    listener="@{model.enableDebugLogsListener}"
+                    checked="@={model.enableDebugLogs}"/>
+
+                <LinearLayout
+                    android:id="@+id/debug_log_options"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="@{model.enableDebugLogs ? View.VISIBLE : View.GONE}"
+                    android:orientation="vertical">
+
+                    <include
+                        layout="@layout/settings_widget_basic"
+                        title='@{model.getText("clear_logs")}'
+                        listener="@{view.clearLogsListener}"
+                        subsection="@{true}"
+                        />
+
+                    <include
+                        android:id="@+id/send_logs"
+                        layout="@layout/settings_widget_basic"
+                        title='@{model.getText("send_logs")}'
+                        listener="@{view.sendLogsListener}"
+                        subsection="@{true}"
+                        />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- About -->
+        <LinearLayout
+            android:id="@+id/card_about"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_about" layout="@layout/settings_card_header" title='@{model.getText("settings_card_about")}' />
+            <LinearLayout android:id="@+id/body_about" style="@style/SettingsCardBody">
+                <include
+                    android:id="@+id/about"
+                    layout="@layout/chunk_about"
+                    bind:coreContext="@{coreContext}" />
+            </LinearLayout>
+        </LinearLayout>
 
     </LinearLayout>
     </ScrollView>

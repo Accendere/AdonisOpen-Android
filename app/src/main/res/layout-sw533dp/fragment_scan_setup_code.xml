@@ -23,12 +23,12 @@
             android:layout_height="wrap_content"
             android:background="@color/color_c"
             android:paddingBottom="60dp"
-            tools:context=".ui.assistant.remote.RemoteQrAccountFragment">
+            tools:context=".ui.assistant.scan.ScanSetupCodeFragment">
 
             <TextView
                 android:id="@+id/title"
                 style='@{"view_main_title"}'
-                text='@{"assistant_remote_from_qr"}'
+                text='@{"scan_setup_code"}'
                 android:layout_width="300dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="40dp"
@@ -55,7 +55,7 @@
             <TextView
                 android:id="@+id/subtitle"
                 style='@{"view_sub_title"}'
-                text='@{"assistant_remote_from_qr_desc"}'
+                text='@{"scan_setup_code_desc"}'
                 android:layout_width="300dp"
                 android:layout_height="wrap_content"
                 android:layout_below="@+id/title"
@@ -66,7 +66,7 @@
                 android:id="@+id/infotext"
                 android:padding="10dp"
                 style='@{"info_bubble"}'
-                text='@{"assistant_remote_prov_from_qr_infobubble"}'
+                text='@{"scan_setup_code_info"}'
                 backgoundcolor='@{"color_n"}'
                 android:layout_width="210dp"
                 android:layout_height="wrap_content"
@@ -119,7 +119,19 @@
             android:layout_below="@id/mask_container">
         </View>
 
-
+        <!-- "This isn't an Adonis Open setup code" (ScanSetupCodeFragment). -->
+        <TextView
+            android:id="@+id/scan_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/mask_container"
+            android:layout_marginTop="24dp"
+            android:layout_marginStart="32dp"
+            android:layout_marginEnd="32dp"
+            android:gravity="center"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:visibility="invisible" />
 
     </RelativeLayout>
 

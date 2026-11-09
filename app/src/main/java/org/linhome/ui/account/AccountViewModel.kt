@@ -27,33 +27,38 @@ import org.linhome.LinhomeApplication
 import org.linhome.customisation.Texts
 import org.linhome.entities.LinhomeAccount
 import org.linhome.linphonecore.extensions.toHumanReadable
+import org.linhome.utils.SiteInfo
 import org.linphone.core.Core
 import org.linphone.core.CoreListenerStub
 import org.linphone.core.RegistrationState
 
+/** The Account screen: a summary of the SIP account (who, where, how, its status). */
 class AccountViewModel : ViewModel() {
-    val account = LinhomeAccount.get()
-    val pushGw = LinhomeAccount.pushGateway()
-    val accountDesc = MutableLiveData(getDescription("account_info",account))
-    val pushGWDesc = MutableLiveData(getDescription("push_account_info",pushGw))
+    var account = LinhomeAccount.get()
+        private set
+
+    /** `user@domain`, or the "no account" text. */
+    val identity = MutableLiveData<String?>()
+
+    /** "Alameda", the transport, the status: one line each. */
+    val details = MutableLiveData<String?>()
+
+    val configured = MutableLiveData(account != null)
 
     private val coreListener = object : CoreListenerStub() {
-
         override fun onAccountRegistrationStateChanged(
             core: Core,
             cfg: org.linphone.core.Account,
             state: RegistrationState?,
             message: String
         ) {
-            if (cfg == account)
-                accountDesc.value = getDescription("account_info",account)
-            if (cfg == pushGw)
-                pushGWDesc.value = getDescription("push_account_info",pushGw)
+            if (cfg == account) refreshDescriptions()
         }
     }
 
     init {
         LinhomeApplication.coreContext.core.addListener(coreListener)
+        refreshDescriptions()
     }
 
     override fun onCleared() {
@@ -61,39 +66,27 @@ class AccountViewModel : ViewModel() {
         super.onCleared()
     }
 
-    fun refreshRegisters() {
-        if (!LinhomeApplication.corePreferences.appEnabled) {
-            refreshDescriptions()
+    fun refreshDescriptions() {
+        account = LinhomeAccount.get()
+        configured.value = account != null
+        val current = account
+        if (current == null) {
+            identity.value = Texts.get("no_account_configured")
+            details.value = null
             return
         }
-        account?.refreshRegister()
-        pushGw?.refreshRegister()
-    }
-
-    fun refreshDescriptions() {
-        accountDesc.value = getDescription("account_info", account)
-        pushGWDesc.value = getDescription("push_account_info", pushGw)
-    }
-
-    fun getDescription(key:String, account: org.linphone.core.Account?): String? {
-        if (account == null) return Texts.get("no_account_configured")
-        val stateText = if (!LinhomeApplication.corePreferences.appEnabled) {
+        val address = current.params?.identityAddress
+        identity.value = listOfNotNull(address?.username, address?.domain).joinToString("@")
+        val status = if (!LinhomeApplication.corePreferences.appEnabled) {
             Texts.get("registration_state_paused")
         } else {
-            account.state?.toHumanReadable()
+            current.state?.toHumanReadable()
         }
-        return stateText?.let {
-            account.params?.identityAddress?.asStringUriOnly()?.let { it1 ->
-                Texts.get(key, it1, it)
-            }
-        } ?: Texts.get("no_account_configured")
+        val site = SiteInfo.name(LinhomeApplication.instance)
+        details.value = listOfNotNull(
+            site?.let { Texts.get("account_site", it) },
+            current.params?.transport?.name?.uppercase()?.let { Texts.get("account_transport", it) },
+            status?.let { Texts.get("account_status", it) }
+        ).joinToString("\n")
     }
-
-    fun isLinhome() : Boolean {
-        return LinhomeAccount.get()?.let {
-            it.params.domain == LinhomeApplication.corePreferences.loginDomain
-        }?:false
-    }
-
-
 }

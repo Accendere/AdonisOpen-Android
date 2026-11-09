@@ -44,8 +44,8 @@ class AssistantRootFragment : GenericFragment() {
         binding.sip.setOnClickListener {
             navigateToCompotent(R.id.navigation_assistant_login_sip)
         }
-        binding.remote.setOnClickListener {
-            mainactivity.navController.navigate(R.id.navigation_assistant_remote_root)
+        binding.scan.setOnClickListener {
+            mainactivity.openScanner()
         }
         binding.findSite.setOnClickListener {
             org.linhome.pairing.Pairing.searchFromButton(mainactivity)
@@ -59,7 +59,7 @@ class AssistantRootFragment : GenericFragment() {
                 "assistant_using_will_disconnect_title",
                 "assistant_using_will_disconnect_message",
                 { _: DialogInterface, _: Int ->
-                    LinhomeAccount.disconnect(deletePushAccount = componentResource == R.id.navigation_assistant_remote_root)
+                    LinhomeAccount.disconnect()
                     mainactivity.navController.navigate(componentResource)
                 })
         } else

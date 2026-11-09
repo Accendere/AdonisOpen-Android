@@ -35,6 +35,7 @@ import org.linhome.GenericFragment
 import org.linhome.LinhomeApplication
 import org.linhome.R
 import org.linhome.customisation.Texts
+import org.linhome.customisation.Theme
 import org.linhome.databinding.FragmentSettingsBinding
 import org.linhome.utils.DialogUtil
 import org.linphone.core.Core
@@ -65,7 +66,10 @@ class SettingsFragment : GenericFragment() {
         )
         binding.model = settingsViewModel
         binding.view = this
+        binding.coreContext = LinhomeApplication.coreContext
         binding.lifecycleOwner = this
+        setupCards()
+        setupAboutLinks()
         settingsViewModel.themeChangedEvent.observe(viewLifecycleOwner, Observer { changed ->
             if (changed) {
                 settingsViewModel.themeChangedEvent.value = false
@@ -76,6 +80,59 @@ class SettingsFragment : GenericFragment() {
         return binding.root
     }
 
+
+    /** The cards open and close by tapping their header; which ones are open is kept while the app runs. */
+    private fun setupCards() {
+        val cards = listOf(
+            Triple("calls", binding.cardCalls, binding.headerCalls) to binding.bodyCalls,
+            Triple("appearance", binding.cardAppearance, binding.headerAppearance) to binding.bodyAppearance,
+            Triple("history", binding.cardHistory, binding.headerHistory) to binding.bodyHistory,
+            Triple("advanced", binding.cardAdvanced, binding.headerAdvanced) to binding.bodyAdvanced,
+            Triple("diagnostics", binding.cardDiagnostics, binding.headerDiagnostics) to binding.bodyDiagnostics,
+            Triple("about", binding.cardAbout, binding.headerAbout) to binding.bodyAbout
+        )
+        val radius = 16f * resources.displayMetrics.density
+        for ((parts, body) in cards) {
+            val (key, card, header) = parts
+            card.background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = radius
+                setColor(Theme.getColor("color_c"))
+            }
+            card.clipToOutline = true
+            fun show(open: Boolean) {
+                body.visibility = if (open) View.VISIBLE else View.GONE
+                header.chevron.rotation = if (open) 180f else 0f
+                header.cardHeader.contentDescription = header.cardTitle.text.toString() + ", " +
+                    Texts.get(if (open) "settings_card_expanded" else "settings_card_collapsed")
+            }
+            show(openCards[key] ?: (key in OPEN_BY_DEFAULT))
+            header.cardHeader.setOnClickListener {
+                val open = body.visibility != View.VISIBLE
+                openCards[key] = open
+                show(open)
+            }
+        }
+    }
+
+    private fun setupAboutLinks() {
+        fun open(urlKey: String) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Texts.get(urlKey))))
+            } catch (e: ActivityNotFoundException) {
+                Log.e(e)
+            }
+        }
+        binding.about.sourceCode.setOnClickListener { open("about_source_url") }
+        binding.about.upstreamLink.setOnClickListener { open("about_upstream_url") }
+        binding.about.licence.setOnClickListener { open("license_link") }
+        binding.about.privacyPolicy.setOnClickListener { open("privacy_policy_link") }
+    }
+
+    companion object {
+        /** Calls, Appearance and History start open; Advanced, Diagnostics and About closed. */
+        private val OPEN_BY_DEFAULT = setOf("calls", "appearance", "history")
+        private val openCards = mutableMapOf<String, Boolean>()
+    }
 
     private fun initCodecsList(
         payloads: Array<PayloadType>,
