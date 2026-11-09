@@ -99,9 +99,18 @@ With no link at all, the app can find its site on the local network. The contrac
 - Discovery uses Android's `NsdManager` (no extra permission today). Android's upcoming local-network permission will need handling when the app targets an SDK that enforces it.
 
 ### Importing Settings
-Every setup (link, claim, pairing, pushed update) opens a full-screen import page: a short summary on top with Apply, and "Show details and choose" listing the SIP account, each door, the webhooks (domain, authentication, polling, events) and remote provisioning, each with a checkbox. Each part is compared with what the phone has: the account says "no change", "new password" or which account it replaces; doors say new, unchanged or what changes. Only what changes is pre-selected. The code is in `app/src/main/java/org/linhome/ui/importsettings/` and `utils/ImportPlan.kt`.
+Every setup (link, claim, pairing, pushed update, scanned code) opens a full-screen import page. On top it says where the settings come from ("Settings from <site>": the site's name from LAN pairing or the setup's optional `site_name`, else its host) and why the page opened (a link from Home Assistant or another app, a scanned code, a site update, Wi-Fi pairing), and that nothing changes until Apply. Then a short summary with Apply, and "Show details and choose" listing the SIP account, each door and the webhooks (domain, authentication, polling, events), each with a checkbox. Each part is compared with what the phone has: the account says "no change", "new password" or which account it replaces; doors say new, unchanged or what changes. Only what changes is pre-selected. The code is in `app/src/main/java/org/linhome/ui/importsettings/`, `utils/ImportPlan.kt` and `utils/ImportSource.kt`.
 
-The pairing code dialog has an "Approve in Home Assistant" button when the site gives the approval page (`approve_path`) and the Home Assistant app is installed.
+Linhome's XML remote provisioning (`adonis://configure?url=` / `xml=`, JSON `url` / `xml`) is not supported: a link with only `url=` is not a setup.
+
+### Scan a setup code
+The scanner (`ui/assistant/scan/`, classification in `utils/SetupCode.kt`) accepts an `adonis://configure` link or its JSON (plain or base64), an `adonis://claim?url=` link, and the site's install page `https://<host>[:port]/api/public/adonis-open/open/<code>`, which it turns into the claim URL `https://<host>[:port]/api/public/adonis-open/claim/<code>` (https only). Anything else shows "This isn't an Adonis Open setup code" and keeps scanning: the account is never touched, and the scanned text is never logged.
+
+### Navigation
+A bottom bar with **Doors**, **History** and **Settings** (no side menu); the receive-calls switch stays in the toolbar.
+- **Doors**: the account card on top (`ui/devices/AccountCardView.kt`): one line (`user · site`, else the SIP domain) with a status dot that opens the Account screen; "Connecting…" when registering takes more than 3 s; a red "Can't connect to <domain>: <reason>" banner with Retry once the registration failed, until it works again (`ui/account/AccountStatus.kt`, `linphonecore/RegistrationMonitor.kt`). Without an account the card offers Scan a setup code, Find my site on this Wi-Fi and Enter a SIP account manually. Below: the doors, with a "+" under the last one.
+- **Settings**: cards that open and close (Calls, Appearance, History open; Advanced, Diagnostics, About closed).
+- **Account screen**: the account's summary, **Edit account** (the SIP form prefilled, saved in place; an empty password keeps the current one), new settings from the site (scan, Wi-Fi) and **Forget account**.
 
 ### Quick Settings & Widgets
 - **Quick Settings Tile**: Toggle "Receive Calls" on or off directly from the Android quick settings notification shade.
