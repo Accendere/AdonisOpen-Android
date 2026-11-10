@@ -136,7 +136,8 @@ class DeviceEditorViewModel : ViewModelWithTools() {
                     device?.actions?.add(
                         Action(
                             availableActionTypes.get(it.type.value!!).backingKey,
-                            it.code.first.value!!
+                            it.code.first.value!!,
+                            it.method
                         )
                     )
             }
@@ -156,7 +157,8 @@ class DeviceEditorViewModel : ViewModelWithTools() {
                         it.actions?.add(
                             Action(
                                 availableActionTypes.get(action.type.value!!).backingKey,
-                                action.code.first.value!!
+                                action.code.first.value!!,
+                                action.method
                             )
                         )
                 }
@@ -171,6 +173,7 @@ class DeviceEditorViewModel : ViewModelWithTools() {
         val actionViewModel = DeviceEditorActionViewModel(this, binding, MutableLiveData(actionsViewModels.size + 1))
         action?.also {
             actionViewModel.code.first.value = action.code
+            actionViewModel.method = action.method
             actionViewModel.type.value = indexByBackingKey(action.type, availableActionTypes)
         }
         actionsViewModels.add(actionViewModel)

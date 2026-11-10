@@ -24,8 +24,25 @@ import android.os.Parcelable
 import kotlinx.android.parcel.Parcelize
 import org.linhome.customisation.ActionTypes
 
+/**
+ * One button of a device: its [type] (a section of action_types.xml) and its [code].
+ *
+ * [method] null sends [code] to the device the device's way (DTMF or SIP message). [METHOD_SITE] sends nothing to the
+ * device: the press only goes to the site as the `door_action` webhook, and Adonis runs the action there (a garage,
+ * run by a DeviceAction row matching the code). Stored in the vCard as `type~code~site`.
+ */
 @Parcelize
-data class Action(val type: String?, val code: String?) : Parcelable {
+data class Action(val type: String?, val code: String?, val method: String? = null) : Parcelable {
+
+    companion object {
+        const val METHOD_SITE = "site"
+    }
+
+    /** Run by the site (Adonis), not the door: no DTMF. */
+    fun isSite(): Boolean = method == METHOD_SITE
+
+    /** The vCard value: `type~code`, plus `~method` when there is one. */
+    fun vcardValue(): String = listOfNotNull(type, code, method).joinToString("~")
 
     fun typeName(): String? {
         return type?.let {

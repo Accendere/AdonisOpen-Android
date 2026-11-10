@@ -62,7 +62,7 @@ fun Vcard.isValid():  Boolean {
     card.getExtendedPropertiesValuesByName(Device.vcard_actions_list_header).forEach { action ->
         val actionCleaned = action.replace("\\;","~").replace(";","~")
         var components = actionCleaned.split("~")
-        if (components.size == 2) {
+        if (components.size in 2..3) {
             validActions = validActions && ActionTypes.isValid(components.component1())
         } else {
             validActions = false

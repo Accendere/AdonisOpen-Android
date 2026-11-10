@@ -361,6 +361,10 @@ class CallViewModel(val call: Call) : ViewModel() {
     }
 
     private fun executeActionNow(action: Action) {
+        if (action.isSite()) {
+            executeSiteAction(action)
+            return
+        }
         coreContext.reportDoorAction(call, action)
         val actionMethodType = device.value?.let { d->
             d.actionsMethodType
@@ -408,6 +412,32 @@ class CallViewModel(val call: Call) : ViewModel() {
                 val message = chatRoom?.createMessageFromUtf8(action.code)
                 message?.send()
                 DialogUtil.toast("action_sent", oneArg = action.actionText())
+            }
+        }
+    }
+
+    /**
+     * A button the site runs (the garage): nothing goes to the door, the press only reaches Adonis as the
+     * `door_action` webhook. Without webhooks to the site (or with door_action not among its events) it can't work,
+     * and says so instead of pretending it was sent.
+     */
+    private fun executeSiteAction(action: Action) {
+        val name = Texts.get(action.typeName() ?: "") ?: action.code ?: ""
+        Compatibility.vibrateActionFeedback()
+        if (!org.linhome.webhooks.Webhooks.sends(org.linhome.webhooks.WebhookEvents.DOOR_ACTION)) {
+            Log.w("[CallViewModel] Site action ${action.code} pressed, but this phone sends no door_action webhook to the site")
+            actionFeedbackState.value = ActionFeedbackState.IDLE
+            DialogUtil.toast("action_site_unavailable", long = true, oneArg = name)
+            return
+        }
+        Log.i("[CallViewModel] Site action ${action.code}: reported to the site, no DTMF")
+        coreContext.reportDoorAction(call, action)
+        actionFeedbackState.value = ActionFeedbackState.COMPLETED
+        actionFeedbackText.value = Texts.get("action_sent", name)
+        GlobalScope.launch(context = Dispatchers.Main) {
+            delay(2500)
+            if (actionFeedbackState.value == ActionFeedbackState.COMPLETED) {
+                actionFeedbackState.value = ActionFeedbackState.IDLE
             }
         }
     }

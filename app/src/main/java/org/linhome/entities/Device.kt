@@ -75,7 +75,7 @@ data class Device(
                 friend.vcard?.addExtendedProperty(vcard_action_method_type_header, methodKey)
                 actions?.forEach { it ->
                     if (!it.type.isNullOrBlank() && !it.code.isNullOrBlank()) {
-                        friend.vcard?.addExtendedProperty(vcard_actions_list_header, it.type!! + "~" + it.code!!)
+                        friend.vcard?.addExtendedProperty(vcard_actions_list_header, it.vcardValue())
                     }
                 }
                 Log.i("[Device] created vCard for device: $name ${friend.vcard?.asVcard4String()}")
@@ -110,10 +110,10 @@ data class Device(
         card.getExtendedPropertiesValuesByName(vcard_actions_list_header)?.forEach { action ->
             val actionCleaned = action.replace("\\;", "~").replace(";", "~")
             val components = actionCleaned.split("~")
-            if (components.size != 2) {
+            if (components.size !in 2..3) {
                 Log.e("Unable to create action from VCard $action")
             } else {
-                actions?.add(Action(components[0], components[1]))
+                actions?.add(Action(components[0], components[1], components.getOrNull(2)?.takeIf { it.isNotBlank() }))
             }
         }
     }

@@ -81,7 +81,11 @@ class SettingsFragment : GenericFragment() {
     }
 
 
-    /** The cards open and close by tapping their header; which ones are open is kept while the app runs. */
+    /**
+     * The cards open and close by tapping their header; which ones are open is kept while the app runs. Every card
+     * starts closed, and its header is tinted with the accent (color_i, the chevron color_a), so it reads as a
+     * heading and not as one more setting on the white body (color_d).
+     */
     private fun setupCards() {
         val cards = listOf(
             Triple("calls", binding.cardCalls, binding.headerCalls) to binding.bodyCalls,
@@ -99,13 +103,20 @@ class SettingsFragment : GenericFragment() {
                 setColor(Theme.getColor("color_d"))
             }
             card.clipToOutline = true
+            val accent = Theme.getColor("color_a")
+            header.cardHeader.background = android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x40)),
+                android.graphics.drawable.ColorDrawable(Theme.getColor("color_i")),
+                null
+            )
+            header.chevron.setColorFilter(accent)
             fun show(open: Boolean) {
                 body.visibility = if (open) View.VISIBLE else View.GONE
                 header.chevron.rotation = if (open) 180f else 0f
                 header.cardHeader.contentDescription = header.cardTitle.text.toString() + ", " +
                     Texts.get(if (open) "settings_card_expanded" else "settings_card_collapsed")
             }
-            show(openCards[key] ?: (key in OPEN_BY_DEFAULT))
+            show(openCards[key] ?: false)
             header.cardHeader.setOnClickListener {
                 val open = body.visibility != View.VISIBLE
                 openCards[key] = open
@@ -129,8 +140,7 @@ class SettingsFragment : GenericFragment() {
     }
 
     companion object {
-        /** Calls, Appearance and History start open; Advanced, Diagnostics and About closed. */
-        private val OPEN_BY_DEFAULT = setOf("calls", "appearance", "history")
+        /** The cards the person opened or closed since the app started; the others are closed. */
         private val openCards = mutableMapOf<String, Boolean>()
     }
 

@@ -31,6 +31,9 @@ class DeviceEditorActionViewModel(
     val displayIndex: MutableLiveData<Int> = MutableLiveData(0)
 ) : ViewModel() {
     var type: MutableLiveData<Int> = MutableLiveData<Int>(0)
+
+    /** Kept as it came (a site button from the setup link): the editor has no field for it. */
+    var method: String? = null
     var code: Pair<MutableLiveData<String>, MutableLiveData<Boolean>> =
         Pair(MutableLiveData<String>(), MutableLiveData<Boolean>(false))
 

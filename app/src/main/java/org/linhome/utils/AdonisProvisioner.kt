@@ -46,7 +46,9 @@ import java.nio.charset.StandardCharsets
 
 data class AdonisActionConfig(
     val type: String = "action_type_open_door",
-    val code: String = "#"
+    val code: String = "#",
+    /** null: sent to the door as the device's method; "site": no DTMF, the site runs it (see [Action.METHOD_SITE]). */
+    val method: String? = null
 )
 
 data class AdonisDeviceConfig(
@@ -231,7 +233,8 @@ object AdonisProvisioner {
                                 val actObj = actionsArray.getJSONObject(j)
                                 val actType = actObj.optString("type", "action_type_open_door")
                                 val actCode = actObj.optString("code", "#")
-                                actionsList.add(AdonisActionConfig(actType, actCode))
+                                val actMethod = actObj.optString("method", "").trim().takeIf { it.isNotEmpty() }
+                                actionsList.add(AdonisActionConfig(actType, actCode, actMethod))
                             }
                         }
                         if (actionsList.isEmpty()) {
@@ -312,11 +315,12 @@ object AdonisProvisioner {
         "open_gate", "gate", "gate_open", "action_open_gate", "action_type_open_gate" -> "action_open_gate"
         "lightup", "light", "light_up", "action_lightup", "action_type_lightup" -> "action_lightup"
         "unlock", "action_unlock", "action_type_unlock" -> "action_unlock"
+        "open_garage", "garage", "action_open_garage", "action_type_open_garage" -> "action_open_garage"
         else -> "action_open_door"
     }
 
     private fun mapActions(actions: List<AdonisActionConfig>): List<Action> {
-        val mapped = actions.map { act -> Action(mapActionType(act.type), act.code) }
+        val mapped = actions.map { act -> Action(mapActionType(act.type), act.code, act.method) }
         return mapped.ifEmpty { listOf(Action("action_open_door", "#")) }
     }
 
@@ -344,14 +348,14 @@ object AdonisProvisioner {
                 CurrentDevice(
                     existing.name, existing.address, existing.alternativeAddress,
                     existing.actionsMethodType ?: corePreferences.defaultActionsMethodType ?: "",
-                    existing.actions.orEmpty().map { (it.type ?: "") to it.code }
+                    existing.actions.orEmpty().map { (it.type ?: "") to it.vcardValue() }
                 )
             }
             ImportPlan.compareDevice(
                 index, dev, match,
                 formattedAddress = { formatSipAddress(it, config.sip?.domain) },
                 mappedMethod = mapMethod(dev.method),
-                mappedActions = mapActions(dev.actions).map { (it.type ?: "") to it.code }
+                mappedActions = mapActions(dev.actions).map { (it.type ?: "") to it.vcardValue() }
             )
         }
         val webhook = ImportPlan.compareWebhook(config.webhook, Webhooks.config, linkHasSip = config.sip != null)
