@@ -6,6 +6,7 @@ plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-parcelize'
+    id 'com.google.gms.google-services'
     id "androidx.navigation.safeargs"
 }
 
@@ -190,6 +191,10 @@ dependencies {
     implementation 'commons-codec:commons-codec:1.19.0'
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2"
     implementation 'com.caverock:androidsvg-aar:1.4'
+
+    // Push: the SIP server (sip.linhome.org) wakes the app with FCM when a door calls. Messaging only:
+    // no Analytics, no Crashlytics.
+    implementation 'com.google.firebase:firebase-messaging:25.0.1'
 
     implementation 'com.github.ybq:Android-SpinKit:1.4.0'
     implementation "androidx.media:media:1.7.1"

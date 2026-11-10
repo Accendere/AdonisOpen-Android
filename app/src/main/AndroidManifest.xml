@@ -188,6 +188,13 @@
             android:name="org.linhome.widgets.ReceiveCallsToggleReceiver"
             android:exported="false" />
 
+        <!-- Push from the SIP server: liblinphone's FCM receiver (wakes the core for an incoming call) -->
+        <service android:name="org.linphone.core.tools.firebase.FirebaseMessaging" android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <service
             android:name="org.linhome.quicksettings.ReceiveCallsTileService"
             android:icon="@drawable/ic_qs_adonis_tile"
