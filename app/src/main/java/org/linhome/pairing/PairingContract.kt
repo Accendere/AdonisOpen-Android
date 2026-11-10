@@ -27,8 +27,8 @@ import java.io.IOException
 import java.net.URI
 
 /**
- * LAN pairing: an app with no setup finds its site on the Wi-Fi (mDNS `_adonis-open._tcp`), shows a 6-digit
- * code, and an administrator (or the person) approves it on the site. The site then answers with a claim URL,
+ * LAN pairing: an app with no setup finds its site on the Wi-Fi (mDNS `_adonis-open._tcp`), shows a short
+ * code (3 digits from Adonis since November 2026, 6 before), and an administrator (or the person) approves it on the site. The site then answers with a claim URL,
  * which the app handles exactly like a claim link (contract: "LAN pairing" in Adonis's
  * docs/features/adonis-open-setup-link.md).
  *
@@ -43,7 +43,10 @@ object PairingContract {
     private const val DEFAULT_INTERVAL_SECONDS = 3
     private const val DEFAULT_EXPIRES_IN_SECONDS = 600
     private const val MAX_EXPIRES_IN_SECONDS = 3600
-    private val CODE = Regex("""^[0-9]{6}$""")
+    private val CODE = Regex("""^[0-9]{3,8}$""")
+
+    /** The code as the phone shows it: in groups of three, "482" or "482 913". */
+    fun displayCode(code: String): String = code.chunked(3).joinToString(" ")
 
     /**
      * The site an mDNS announcement describes, or null when it isn't a usable one. Only the TXT `url` is used,

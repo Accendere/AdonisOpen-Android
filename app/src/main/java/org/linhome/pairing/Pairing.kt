@@ -254,7 +254,7 @@ object Pairing {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             })
             addView(TextView(a).apply {
-                text = "${pairing.code.substring(0, 3)} ${pairing.code.substring(3)}"
+                text = PairingContract.displayCode(pairing.code)
                 contentDescription = pairing.code.toCharArray().joinToString(" ")
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 40f)
                 typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
