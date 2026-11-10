@@ -26,56 +26,20 @@ tasks.register("zipTheme", Zip) {
 
 
 
-// a custom task type with ExecOperations injected
-abstract class GitVersionTask extends DefaultTask {
-    @Inject
-    abstract ExecOperations getExecOperations()
-
-    @TaskAction
-    void run() {
-        def gitVersion = "5.0.0"
-        def gitVersionStream = new ByteArrayOutputStream()
-        def gitCommitsCount = new ByteArrayOutputStream()
-        def gitCommitHash = new ByteArrayOutputStream()
-
-        try {
-            getExecOperations().exec {
-                commandLine "git", "describe", "--abbrev=0"
-                standardOutput = gitVersionStream
-            }
-            getExecOperations().exec {
-                commandLine "git", "rev-list",
-                        gitVersionStream.toString().trim() + "..HEAD", "--count"
-                standardOutput = gitCommitsCount
-            }
-            getExecOperations().exec {
-                commandLine "git", "rev-parse", "--short", "HEAD"
-                standardOutput = gitCommitHash
-            }
-
-            if (gitCommitsCount.toString().toInteger() == 0) {
-                gitVersion = gitVersionStream.toString().trim()
-            } else {
-                gitVersion = gitVersionStream.toString().trim() + "." +
-                        gitCommitsCount.toString().trim() + "+" +
-                        gitCommitHash.toString().trim()
-            }
-            println("Git version: " + gitVersion)
-        } catch (ignored) {
-            println("Git not found")
-        }
-        project.version = gitVersion
+// The version is versionName below, the single source of truth (Linhome's git tags are not ours). The short commit hash
+// rides along in the APK name and the About screen, so a test build is traceable to its commit. Computed at
+// configuration time, unlike the old GitVersionTask, which set project.version after the APK name had been fixed
+// ("unspecified").
+def gitShortHash = { ->
+    try {
+        return providers.exec { commandLine "git", "rev-parse", "--short", "HEAD" }.standardOutput.asText.get().trim()
+    } catch (ignored) {
+        return "nogit"
     }
-}
-
-tasks.register("getGitVersion", GitVersionTask)
-tasks.named("preBuild").configure {
-    dependsOn(tasks.named("getGitVersion"))
-}
+}()
 
 tasks.named("preBuild").configure {
     dependsOn(tasks.named("zipTheme"))
-    dependsOn(tasks.named("getGitVersion"))
 }
 
 // Release signing is optional and never committed to the repository.
@@ -97,8 +61,11 @@ android {
         applicationId "org.probonis"
         minSdkVersion 23
         targetSdkVersion 36
-        versionCode 40
-        versionName "1.5.0"
+        versionCode 41
+        versionName "2.0.0"
+        buildConfigField "String", "GIT_HASH", "\"${gitShortHash}\""
+        // The Linhome release this fork started from, shown on the About screen.
+        buildConfigField "String", "LINHOME_BASE_VERSION", "\"1.5.0\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -107,7 +74,7 @@ android {
                 linhome_file_provider: applicationId + ".fileprovider"
         ]
         variant.outputs.all {
-            outputFileName = "adonis-open-${variant.buildType.name}-${project.version}.apk"
+            outputFileName = "adonis-open-${variant.buildType.name}-${variant.versionName}-${gitShortHash}.apk"
         }
     }
 

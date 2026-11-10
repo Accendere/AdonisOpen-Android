@@ -375,8 +375,8 @@ class MainActivity : GenericActivity() {
 
     fun applyTheme() { //Todo move into bindings when validated
         binding.root.setBackgroundColor(Theme.getColor("color_f"))
-        binding.appbar.toolbar.setBackgroundColor(Theme.getColor("color_c"))
-        binding.appbar.contentmain.tabbar.setBackgroundColor(Theme.getColor("color_c"))
+        binding.appbar.toolbar.setBackgroundColor(Theme.getColor("color_d"))
+        binding.appbar.contentmain.tabbar.setBackgroundColor(Theme.getColor("color_d"))
         binding.appbar.contentmain.unreadCount.backgroundTintList = Theme.buildSingleColorStateList("color_a")
         binding.appbar.progress.indeterminateTintList = Theme.buildSingleColorStateList("color_a")
         binding.appbar.progress.setBackgroundColor(Theme.getColor("color_i"))
@@ -537,11 +537,14 @@ class MainActivity : GenericActivity() {
 
     fun applyCommonTheme() {
         window.also { window ->
-            window.statusBarColor = Theme.getColor("color_c")
-            window.navigationBarColor = Theme.getColor("color_c")
+            val bars = Theme.getColor("color_d")
+            window.statusBarColor = bars
+            window.navigationBarColor = bars
+            // Dark icons on a light bar, light icons on a dark one (the dark theme).
+            val lightBars = androidx.core.graphics.ColorUtils.calculateLuminance(bars) > 0.5
             WindowInsetsControllerCompat(window, window.decorView).let { controller ->
-                controller.isAppearanceLightStatusBars = true
-                controller.isAppearanceLightNavigationBars = true
+                controller.isAppearanceLightStatusBars = lightBars
+                controller.isAppearanceLightNavigationBars = lightBars
             }
         }
     }

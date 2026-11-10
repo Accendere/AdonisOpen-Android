@@ -41,17 +41,17 @@
             android:elevation="6dp"
             app:cardElevation="6dp"
             app:cardPreventCornerOverlap="true"
-            roundRectWithColor='@{"color_c"}'
+            roundRectWithColor='@{"color_d"}'
             andRadius='@{"call_in_history_list_corner_radius"}'
             andStrokeWidth='@{2}'
-            andStrokeColor='@{!model.isNew() ? "color_c" : "color_t"}'
+            andStrokeColor='@{!model.isNew() ? "color_h" : "color_t"}'
             selected_stroke_color='@{"color_a"}'>
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 app:cardPreventCornerOverlap="true"
-                roundRectWithColor='@{"color_c"}'
+                roundRectWithColor='@{"color_d"}'
                 andRadius='@{"call_in_history_list_corner_radius"}'>
 
                 <RelativeLayout

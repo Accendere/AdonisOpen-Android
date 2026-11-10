@@ -13,7 +13,7 @@
         android:layout_height="match_parent"
         android:paddingStart="20dp"
         android:paddingEnd="20dp"
-        backgoundcolor='@{"color_c"}'
+        backgoundcolor='@{"color_d"}'
         >
 
         <androidx.constraintlayout.widget.ConstraintLayout xmlns:app="http://schemas.android.com/apk/res-auto"

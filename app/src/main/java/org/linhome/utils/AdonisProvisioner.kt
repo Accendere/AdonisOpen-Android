@@ -392,6 +392,8 @@ object AdonisProvisioner {
                         }
                     }
                     core.clearAllAuthInfo()
+                    // A new account: clean its dead devices on the server at its first registration, not a day later.
+                    org.linhome.linphonecore.LinhomeDeviceCleanup.resetSchedule(core.config)
 
                     val cleanDomain = sip.domain.trim()
                     val cleanUsername = sip.username.trim()

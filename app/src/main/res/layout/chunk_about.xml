@@ -53,6 +53,16 @@
             style='@{"about_text"}' />
 
         <TextView
+            android:id="@+id/linhome_base_version"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAlignment="center"
+            text='@{"about_based_on"}'
+            text_args='@{coreContext.linhomeBaseVersion}'
+            style='@{"about_text"}' />
+
+        <TextView
             android:id="@+id/sdkversion"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

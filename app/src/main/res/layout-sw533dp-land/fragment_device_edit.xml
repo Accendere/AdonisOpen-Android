@@ -45,7 +45,7 @@
                 android:paddingBottom="20dp"
                 android:layout_marginStart="60dp"
                 android:layout_marginEnd="30dp"
-                backgoundcolor='@{"color_c"}'
+                backgoundcolor='@{"color_d"}'
                 android:layout_gravity="top"
                 tools:context=".ui.assistant.loginlinhome.LoginLinhomeAccountFragment"
                 android:orientation="vertical">
@@ -147,7 +147,7 @@
                 android:layout_weight="1"
                 android:layout_height="wrap_content"
                 android:paddingBottom="20dp"
-                backgoundcolor='@{"color_c"}'
+                backgoundcolor='@{"color_d"}'
                 android:layout_gravity="top"
                 tools:context=".ui.assistant.loginlinhome.LoginLinhomeAccountFragment"
                 android:orientation="vertical">

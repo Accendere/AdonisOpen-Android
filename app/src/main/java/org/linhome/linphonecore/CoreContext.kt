@@ -94,8 +94,11 @@ class CoreContext(
     private var phoneStateListener: PhoneStateInterface? = null
 
     val appVersion: String by lazy {
-        "${org.linhome.BuildConfig.VERSION_NAME} / versionCode: ${org.linhome.BuildConfig.VERSION_CODE}  (${org.linhome.BuildConfig.BUILD_TYPE})"
+        "${org.linhome.BuildConfig.VERSION_NAME} (${org.linhome.BuildConfig.VERSION_CODE}, ${org.linhome.BuildConfig.BUILD_TYPE}, ${org.linhome.BuildConfig.GIT_HASH})"
     }
+
+    /** The Linhome release this fork started from, for the About screen. */
+    val linhomeBaseVersion: String = org.linhome.BuildConfig.LINHOME_BASE_VERSION
 
     val sdkVersion: String by lazy {
         val sdkVersion = context.getString(R.string.linphone_sdk_version)
@@ -370,6 +373,10 @@ class CoreContext(
             }
             if (account.params?.idkey != org.linhome.entities.LinhomeAccount.PUSH_GW_ID_KEY) {
                 RegistrationMonitor.onStateChanged(state, message.ifBlank { account.errorInfo?.phrase })
+                if (state == RegistrationState.Ok) {
+                    runCatching { LinhomeDeviceCleanup.onRegistered(core, account) }
+                        .onFailure { Log.e("[Context] Device cleanup failed: ${it.message}") }
+                }
             }
         }
 
@@ -513,6 +520,7 @@ class CoreContext(
             org.linphone.core.tools.Log.i("[Context] Starting foreground service")
             notificationsManager.startForegroundToKeepAppAlive(service, useAutoStartDescription)
         }
+        LinhomeDeviceCleanup.applyStableInstanceId(context, coreConfig)
         core = Factory.instance().createCoreWithConfig(coreConfig, context)
         stopped = false
         Log.i("[Context] Ready")

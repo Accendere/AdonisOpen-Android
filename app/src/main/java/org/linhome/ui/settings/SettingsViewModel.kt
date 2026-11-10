@@ -48,7 +48,7 @@ class SettingsViewModel : ViewModelWithTools() {
     val themeChangedEvent = MutableLiveData(false)
 
     // Theme selector
-    private val themeValues = arrayListOf("orange", "slate", "emerald", "obsidian")
+    private val themeValues = arrayListOf("orange", "slate", "emerald", "obsidian", "dark")
     val themeIndex = MutableLiveData<Int>()
     val themeLabels = MutableLiveData<ArrayList<String>>()
     val themeListener = object : SettingListenerStub() {
@@ -202,7 +202,8 @@ class SettingsViewModel : ViewModelWithTools() {
             Texts.get("theme_orange"),
             Texts.get("theme_slate"),
             Texts.get("theme_emerald"),
-            Texts.get("theme_obsidian")
+            Texts.get("theme_obsidian"),
+            Texts.get("theme_dark")
         )
         val idx = themeValues.indexOf(corePref.appTheme)
         themeIndex.value = if (idx >= 0) idx else 0

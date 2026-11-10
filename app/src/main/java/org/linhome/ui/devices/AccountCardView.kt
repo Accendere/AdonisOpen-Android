@@ -90,9 +90,10 @@ class AccountCardView @JvmOverloads constructor(
             seenInProgressSinceMs = now
         }
         val progressSince = if (snapshot?.failing == true) null else (snapshot?.progressSinceMs ?: seenInProgressSinceMs)
+        val callsEnabled = LinhomeApplication.corePreferences.appEnabled
         val mode = AccountStatus.decide(
             configured = account != null,
-            callsEnabled = LinhomeApplication.corePreferences.appEnabled,
+            callsEnabled = callsEnabled,
             registration = registration,
             failing = snapshot?.failing == true,
             progressSinceMs = progressSince,
@@ -102,11 +103,11 @@ class AccountCardView @JvmOverloads constructor(
         val domain = identity?.domain
         val title = AccountStatus.title(identity?.username, SiteInfo.name(context), domain)
         val reason = snapshot?.reason ?: account?.errorInfo?.phrase?.takeIf { it.isNotBlank() }
-        val key = listOf(mode.name, title, domain, reason).joinToString("|")
+        val key = listOf(mode.name, title, domain, reason, callsEnabled).joinToString("|")
         if (mode != shownMode || key != shownKey) {
             shownMode = mode
             shownKey = key
-            draw(mode, title, domain, reason)
+            draw(mode, title, domain, reason, paused = !callsEnabled)
         }
         AccountStatus.nextCheckInMs(mode, progressSince, now)?.let { delay ->
             handler.postDelayed({ refresh() }, delay + 50)
@@ -118,13 +119,13 @@ class AccountCardView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    private fun draw(mode: AccountCardMode, title: String, domain: String?, reason: String?) {
+    private fun draw(mode: AccountCardMode, title: String, domain: String?, reason: String?, paused: Boolean) {
         removeAllViews()
         setOnClickListener(null)
         isClickable = false
         when (mode) {
             AccountCardMode.NOT_CONFIGURED -> drawSetup()
-            AccountCardMode.FAILED -> drawFailed(domain, reason)
+            AccountCardMode.FAILED -> drawFailed(domain, reason, paused)
             else -> drawCompact(mode, title)
         }
     }
@@ -158,7 +159,7 @@ class AccountCardView @JvmOverloads constructor(
 
     /** One line: the dot, `pedro · Alameda`, a short status when there is one, the chevron. */
     private fun drawCompact(mode: AccountCardMode, title: String) {
-        background = cardBackground(Theme.getColor("color_c"))
+        background = cardBackground(Theme.getColor("color_d"))
         setPadding(dp(14), dp(10), dp(10), dp(10))
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
@@ -188,8 +189,11 @@ class AccountCardView @JvmOverloads constructor(
         setOnClickListener { actions?.openAccount() }
     }
 
-    /** The red banner: "Can't connect to <domain>: <reason>", Retry, and the way to the Account screen. */
-    private fun drawFailed(domain: String?, reason: String?) {
+    /**
+     * The red banner: "Can't connect to <domain>: <reason>", Retry, and the way to the Account screen. With calls
+     * paused, a "Calls paused" line under it: the pause is shown alongside the error, never instead of it.
+     */
+    private fun drawFailed(domain: String?, reason: String?, paused: Boolean) {
         val red = Theme.getColor("color_e")
         background = cardBackground(ColorUtils.setAlphaComponent(red, 0x1F), red)
         setPadding(dp(14), dp(12), dp(10), dp(10))
@@ -202,6 +206,14 @@ class AccountCardView @JvmOverloads constructor(
         row.addView(text(message, 14f, "color_b", bold = true), LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         row.addView(chevron(), LayoutParams(dp(12), dp(12)).apply { marginStart = dp(10) })
         addView(row)
+        val pausedText = if (paused) Texts.get("registration_state_paused") else null
+        pausedText?.let {
+            addView(text(it, 13f, "color_g"), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(4)
+                marginStart = dp(20)
+            })
+        }
+        contentDescription = listOfNotNull(message, pausedText).joinToString(", ")
         val retry = LRoundRectButton(context).apply {
             Theme.roundRectButtonBackgroundStates("decline_call_button")?.also { background = it }
             buttonText.text = Texts.get("account_card_retry")
@@ -225,7 +237,7 @@ class AccountCardView @JvmOverloads constructor(
 
     /** No account yet: how to get one. */
     private fun drawSetup() {
-        background = cardBackground(Theme.getColor("color_c"))
+        background = cardBackground(Theme.getColor("color_d"))
         setPadding(dp(18), dp(18), dp(18), dp(18))
         addView(text(Texts.get("account_card_setup_title"), 18f, "color_b", bold = true))
         addView(text(Texts.get("account_card_setup_text"), 14f, "color_g"), LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {

@@ -47,8 +47,16 @@ class AccountStatusTest {
 
     @Test
     fun pausedCallsAreNotAProblem() {
-        assertEquals(AccountCardMode.PAUSED, decide(Registration.FAILED, failing = true, callsEnabled = false))
         assertEquals(AccountCardMode.PAUSED, decide(Registration.CLEARED, callsEnabled = false))
+        assertEquals(AccountCardMode.PAUSED, decide(Registration.OK, callsEnabled = false))
+        assertEquals(AccountCardMode.PAUSED, decide(Registration.PROGRESS, callsEnabled = false, now = 60_000L))
+    }
+
+    @Test
+    fun anErrorIsNeverHiddenBehindThePause() {
+        assertEquals(AccountCardMode.FAILED, decide(Registration.FAILED, failing = true, callsEnabled = false))
+        // Paused after it started failing: unregistered (Cleared), the error stays until a registration works.
+        assertEquals(AccountCardMode.FAILED, decide(Registration.CLEARED, failing = true, callsEnabled = false))
     }
 
     @Test

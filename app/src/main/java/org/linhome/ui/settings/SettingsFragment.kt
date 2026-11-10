@@ -96,7 +96,7 @@ class SettingsFragment : GenericFragment() {
             val (key, card, header) = parts
             card.background = android.graphics.drawable.GradientDrawable().apply {
                 cornerRadius = radius
-                setColor(Theme.getColor("color_c"))
+                setColor(Theme.getColor("color_d"))
             }
             card.clipToOutline = true
             fun show(open: Boolean) {

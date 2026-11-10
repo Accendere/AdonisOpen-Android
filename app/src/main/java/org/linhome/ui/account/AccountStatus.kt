@@ -35,7 +35,10 @@ enum class AccountCardMode {
     /** Still registering after the delay: compact, "Connecting…". */
     CONNECTING,
 
-    /** Gave up (Linphone's Failed, until it recovers): a red banner with the reason and Retry. */
+    /**
+     * Gave up (Linphone's Failed, until it recovers): a red banner with the reason and Retry. Wins over PAUSED: a
+     * paused account that can't reach its server shows the error too, with a "Calls paused" note, never just the pause.
+     */
     FAILED,
 
     /** The person paused calls: compact, grey dot, nothing to fix. */
@@ -59,9 +62,9 @@ object AccountStatus {
         nowMs: Long
     ): AccountCardMode {
         if (!configured) return AccountCardMode.NOT_CONFIGURED
-        if (!callsEnabled) return AccountCardMode.PAUSED
-        if (registration == Registration.OK) return AccountCardMode.CONNECTED
+        if (registration == Registration.OK && callsEnabled) return AccountCardMode.CONNECTED
         if (failing || registration == Registration.FAILED) return AccountCardMode.FAILED
+        if (!callsEnabled) return AccountCardMode.PAUSED
         val since = progressSinceMs ?: return AccountCardMode.QUIET
         return if (nowMs - since >= CONNECTING_DELAY_MS) AccountCardMode.CONNECTING else AccountCardMode.QUIET
     }
