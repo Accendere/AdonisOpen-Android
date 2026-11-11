@@ -172,11 +172,8 @@ class CallViewModel(val call: Call) : ViewModel() {
         isVoiceCall.value = voice
 
         // Display device type for icon
-        val displayType = when {
-            d?.type != null -> d.type
-            voice -> "phone_call"
-            else -> defaultDeviceType.value ?: "device_audio_intercom"
-        }
+        val displayType: String = d?.type
+            ?: if (voice) "phone_call" else (defaultDeviceType.value ?: "device_audio_intercom")
         callDisplayDeviceType.value = displayType
 
         // Subtitle text key under icon
