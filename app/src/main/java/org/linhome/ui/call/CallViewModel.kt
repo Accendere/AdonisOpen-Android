@@ -226,7 +226,9 @@ class CallViewModel(val call: Call) : ViewModel() {
                     if (corePreferences.saveCallVideos && !call.isRecording) {
                         call.startRecording()
                     }
-                    if (isVoiceCall.value != true || LinhomeApplication.instance.tablet()) {
+                    if (isPhoneCall()) {
+                        routePhoneCall()
+                    } else if (isVoiceCall.value != true || LinhomeApplication.instance.tablet()) {
                         coreContext.core.forceSpeakerAudioRoute()
                         speakerDisabled.value = false
                     } else {
@@ -239,7 +241,9 @@ class CallViewModel(val call: Call) : ViewModel() {
                         }
                     }
                 } else if (cstate == Call.State.StreamsRunning && call.callLog?.dir == Call.Dir.Incoming) {
-                    if (isVoiceCall.value == true && !LinhomeApplication.instance.tablet()) {
+                    if (isPhoneCall()) {
+                        routePhoneCall()
+                    } else if (isVoiceCall.value == true && !LinhomeApplication.instance.tablet()) {
                         val currentType = coreContext.core.outputAudioDevice?.type
                         if (currentType != AudioDevice.Type.Bluetooth &&
                             currentType != AudioDevice.Type.Headphones &&
@@ -310,10 +314,18 @@ class CallViewModel(val call: Call) : ViewModel() {
         val micEnabled = coreContext.core.isMicEnabled
         coreContext.core.isMicEnabled = !micEnabled
         microphoneMuted.value = micEnabled
+        if (isPhoneCall()) {
+            call.microphoneMuted = micEnabled
+            coreContext.core.logCallAudio(call, "mute pressed")
+        }
     }
 
 
     fun toggleSpeaker() {
+        if (isPhoneCall()) {
+            routePhoneCall(toSpeaker = speakerDisabled.value == true)
+            return
+        }
         val audioDevice = coreContext.core.outputAudioDevice
         if (audioDevice?.type == AudioDevice.Type.Speaker) {
             coreContext.core.forceEarpieceAudioRoute()
@@ -439,9 +451,40 @@ class CallViewModel(val call: Call) : ViewModel() {
         }
     }
 
+    /**
+     * A phone call (no known door, no video; see Call.isPlainVoiceCall()) that isn't a silent preview. Its audio is
+     * set on the call itself by [routePhoneCall]; door calls keep the routing they always had.
+     */
+    private fun isPhoneCall(): Boolean =
+        device.value == null && isVoiceCall.value == true && !coreContext.isCallSilentlyAccepted(call)
+
+    /**
+     * Routes a phone call like a phone: to the speaker when [toSpeaker] is true, the earpiece when false, else a
+     * connected headset or Bluetooth device, else the earpiece (the speaker on a tablet). Microphone on, sound at full
+     * volume, unless a GSM call holds the audio (then extendedAccept() keeps it muted).
+     */
+    private fun routePhoneCall(toSpeaker: Boolean? = null) {
+        if (coreContext.gsmCallActive()) return
+        val current = coreContext.core.outputAudioDevice?.type
+        val type = when {
+            toSpeaker == true -> AudioDevice.Type.Speaker
+            toSpeaker == false -> AudioDevice.Type.Earpiece
+            current == AudioDevice.Type.Bluetooth || current == AudioDevice.Type.Headphones || current == AudioDevice.Type.Headset -> current!!
+            LinhomeApplication.instance.tablet() -> AudioDevice.Type.Speaker
+            else -> AudioDevice.Type.Earpiece
+        }
+        coreContext.core.routeVoiceCall(call, type)
+        speakerDisabled.value = type != AudioDevice.Type.Speaker
+        microphoneMuted.value = false
+    }
+
     fun extendedAccept() {
         call.extendedAccept()
         callState.value = call.state
+        if (isPhoneCall()) {
+            routePhoneCall()
+            return
+        }
         if (isVoiceCall.value == true && !LinhomeApplication.instance.tablet()) {
             val currentType = coreContext.core.outputAudioDevice?.type
             if (currentType != AudioDevice.Type.Bluetooth &&

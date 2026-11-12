@@ -36,9 +36,24 @@ import org.linhome.utils.DialogUtil
 import org.linphone.core.Call
 import org.linphone.core.CallParams
 import org.linphone.core.Core
+import org.linphone.core.tools.Log
 
+
+/**
+ * A call that is neither from a known door nor offers video: a phone call (a contact, an unknown number). It has no
+ * preview to show, so it gets no early media, and its audio is set up like a phone's (see CallViewModel).
+ */
+fun Call.isPlainVoiceCall(): Boolean =
+    DeviceStore.findDeviceByAddress(remoteAddress) == null && remoteParams?.isVideoEnabled != true
 
 fun Call.extendedAcceptEarlyMedia() {
+    // Early media is what gives a door call its preview before answering, with the sound held back. A phone call has
+    // nothing to preview, and opening its audio early (muted) and re-routing it to the earpiece after answering left
+    // some phones' calls silent until the speaker button was pressed. Door calls are unchanged.
+    if (isPlainVoiceCall()) {
+        Log.i("[CallAudio] Plain voice call: no early media")
+        return
+    }
     if (state == Call.State.IncomingReceived) {
         val earlyMediaCallParams: CallParams? = coreContext.core.createCallParams(this)
         if (corePreferences.saveCallVideos) {

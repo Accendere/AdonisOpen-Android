@@ -24,6 +24,7 @@ import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.LinhomeApplication.Companion.corePreferences
 import org.linhome.store.HistoryEventStore
 import org.linphone.core.AudioDevice
+import org.linphone.core.Call
 import org.linphone.core.CallLog
 import org.linphone.core.Core
 import org.linphone.core.ProxyConfig
@@ -43,6 +44,34 @@ fun Core.forceEarpieceAudioRoute() {
         }
     }
     Log.e("[Call] Couldn't find earpiece audio device")
+}
+
+/**
+ * A phone call's audio on [call] itself: out to [type] (earpiece or speaker), in from the phone's own microphone,
+ * microphone on and sound at full volume. Only for calls that are not from a door (CallViewModel decides); door calls
+ * keep the core-wide routing above.
+ */
+fun Core.routeVoiceCall(call: Call, type: AudioDevice.Type) {
+    audioDevices.firstOrNull { it.type == type }?.let { device ->
+        call.outputAudioDevice = device
+        outputAudioDevice = device
+    } ?: Log.e("[CallAudio] No ${type.name} audio device")
+    audioDevices.firstOrNull { it.type == AudioDevice.Type.Microphone && it.hasCapability(AudioDevice.Capabilities.CapabilityRecord) }
+        ?.let { mic -> call.inputAudioDevice = mic }
+    isMicEnabled = true
+    call.microphoneMuted = false
+    call.speakerMuted = false
+    call.speakerVolumeGain = 0.0f
+    logCallAudio(call, "routed to ${type.name}")
+}
+
+/** One line with the call's audio state, for the diagnostics log. */
+fun Core.logCallAudio(call: Call, why: String) {
+    Log.i(
+        "[CallAudio] $why: out=${call.outputAudioDevice?.type ?: outputAudioDevice?.type} " +
+            "in=${call.inputAudioDevice?.type ?: inputAudioDevice?.type} micEnabled=$isMicEnabled " +
+            "callMicMuted=${call.microphoneMuted} callSpeakerMuted=${call.speakerMuted} gain=${call.speakerVolumeGain}"
+    )
 }
 
 fun Core.forceSpeakerAudioRoute() {

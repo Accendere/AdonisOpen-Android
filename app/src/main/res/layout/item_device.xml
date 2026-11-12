@@ -40,7 +40,7 @@
                     android:layout_alignParentStart="true"
                     roundRectWithColor='@{"color_d"}'
                     andRadius='@{"user_input_corner_radius"}'
-                    android:visibility='@{device.typeIcon() != null ? View.VISIBLE : View.GONE}'>
+                    android:visibility='@{device.typeIcon() != null || device.hasThumbNail() ? View.VISIBLE : View.GONE}'>
 
                     <ImageView
                         android:id="@+id/type_icon"
@@ -50,7 +50,16 @@
                         android:src="@drawable/ic_linhome_icon"
                         tint='@{"color_a"}'
                         icon='@{device.typeIcon()}'
+                        android:visibility='@{device.hasThumbNail() ? View.GONE : View.VISIBLE}'
                         />
+
+                    <!-- The last call's snapshot, in place of the icon; a tap opens it enlarged (SnapshotViewer). -->
+                    <ImageView
+                        android:id="@+id/snapshot"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="centerCrop"
+                        snapshotOf='@{device}' />
                 </RelativeLayout>
 
                 <LinearLayout

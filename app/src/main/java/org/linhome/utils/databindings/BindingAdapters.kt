@@ -23,6 +23,7 @@ package org.linhome.utils.databindings
 
 import android.text.TextUtils
 import android.view.View
+import org.linhome.utils.extensions.existsAndIsNotEmpty
 import android.view.ViewGroup
 import android.view.animation.Animation
 import android.view.animation.AnimationUtils
@@ -144,6 +145,29 @@ fun cornerRadius(view: CardView, radius: String) {
 ////////////////////////
 /// Spinner
 ///////////////////////
+
+/**
+ * The door's last snapshot, rounded like its badge, opening the enlarged viewer on tap; gone when the door has none.
+ */
+@BindingAdapter("snapshotOf")
+fun snapshotOf(view: ImageView, device: org.linhome.entities.Device?) {
+    val thumb = device?.thumbNail
+    if (device == null || thumb == null || !thumb.existsAndIsNotEmpty()) {
+        view.visibility = View.GONE
+        view.setOnClickListener(null)
+        return
+    }
+    view.visibility = View.VISIBLE
+    view.clipToOutline = true
+    view.outlineProvider = object : android.view.ViewOutlineProvider() {
+        override fun getOutline(v: View, outline: android.graphics.Outline) {
+            outline.setRoundRect(0, 0, v.width, v.height, 12f * v.resources.displayMetrics.density)
+        }
+    }
+    view.contentDescription = Texts.get("snapshot_open", device.name)
+    Theme.glidegeneric.load(thumb).signature(com.bumptech.glide.signature.ObjectKey(thumb.lastModified())).into(view)
+    view.setOnClickListener { org.linhome.ui.devices.SnapshotViewer.show(view.context, device) }
+}
 
 /**
  * A spinner filled from `android:entries` draws its items with Android's own layout, in the system's text colour:

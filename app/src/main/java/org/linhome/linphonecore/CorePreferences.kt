@@ -114,7 +114,7 @@ class CorePreferences constructor(private val context: Context) {
         }
 
     var silentAcceptTimerSeconds: Int
-        get() = config.getInt("app", "silent_accept_timer_seconds", 30)
+        get() = config.getInt("app", "silent_accept_timer_seconds", 10)
         set(value) {
             config.setInt("app", "silent_accept_timer_seconds", value)
             config.sync()

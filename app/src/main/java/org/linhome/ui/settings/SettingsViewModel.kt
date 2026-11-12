@@ -251,7 +251,7 @@ class SettingsViewModel : ViewModelWithTools() {
             "90s"
         )
         val idx = autoCloseDurationValues.indexOf(corePref.silentAcceptTimerSeconds)
-        autoCloseDurationIndex.value = if (idx >= 0) idx else 2
+        autoCloseDurationIndex.value = if (idx >= 0) idx else 0
     }
 
 }

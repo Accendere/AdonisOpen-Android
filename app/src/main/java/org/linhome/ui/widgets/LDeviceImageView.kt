@@ -49,6 +49,8 @@ class LDeviceImageView : androidx.appcompat.widget.AppCompatImageView {
                 if (thumb.existsAndIsNotEmpty()) {
                     load(thumb)
                     visibility = View.VISIBLE
+                    // A tap opens the snapshot enlarged, with pinch to zoom.
+                    setOnClickListener { org.linhome.ui.devices.SnapshotViewer.show(context, value) }
                 } else {
                     visibility = View.INVISIBLE
                 }
