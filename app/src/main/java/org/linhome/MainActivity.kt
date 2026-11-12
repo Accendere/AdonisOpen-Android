@@ -398,7 +398,7 @@ class MainActivity : GenericActivity() {
             val active = id == destination
             tab.isSelected = active
             tab.background = if (active) Theme.roundRectInputBackgroundWithColorKeyAndRadius(
-                "color_i",
+                Theme.colorKeyOr("color_v", "color_i"),
                 "round_rect_button_corner_radius"
             ) else null
             icon.imageTintList = Theme.buildSingleColorStateList(if (active) "color_a" else "color_g")

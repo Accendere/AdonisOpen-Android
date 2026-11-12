@@ -59,14 +59,18 @@ class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
                 events = prefs.getString("events", null)?.let { stored ->
                     stored.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
                 },
-                auth = WebhookAuth.fromWireName(prefs.getString("auth", null)) ?: WebhookAuth.BEARER
+                auth = WebhookAuth.fromWireName(prefs.getString("auth", null)) ?: WebhookAuth.BEARER,
+                siteEvents = prefs.getString("site_events", null)?.let { stored ->
+                    stored.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                },
+                editedLocally = prefs.getBoolean("edited_locally", false)
             )
         }
         set(value) {
             val editor = prefs.edit()
             if (value == null) {
                 editor.remove("base_url").remove("user").remove("token").remove("poll_mode").remove("polling_interval")
-                    .remove("events").remove("auth")
+                    .remove("events").remove("auth").remove("site_events").remove("edited_locally")
             } else {
                 editor.putString("base_url", value.baseUrl)
                     .putString("user", value.user)
@@ -75,6 +79,8 @@ class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
                     .putInt("polling_interval", value.pollingIntervalSeconds)
                     .putString("auth", value.auth.wireName)
                 if (value.events == null) editor.remove("events") else editor.putString("events", value.events.sorted().joinToString(","))
+                if (value.siteEvents == null) editor.remove("site_events") else editor.putString("site_events", value.siteEvents.sorted().joinToString(","))
+                editor.putBoolean("edited_locally", value.editedLocally)
             }
             editor.apply()
         }
@@ -208,6 +214,10 @@ object Webhooks {
     suspend fun whoAnswered(callId: String?, door: String?): String? = engine?.whoAnswered(callId, door)
 
     fun onLinkApplied(config: WebhookConfig?, callsEnabled: Boolean) = onMain { it.onLinkApplied(config, callsEnabled) }
+
+    /** See [WebhookEngine.applyLocalEdit]; null when webhooks aren't set up. Call from the main thread. */
+    fun applyLocalEdit(events: Set<String>, baseUrl: String, callsEnabled: Boolean): WebhookEngine.LocalEdit? =
+        engine?.applyLocalEdit(events, baseUrl, callsEnabled)
 
     private fun onMain(action: (WebhookEngine) -> Unit) {
         val current = engine ?: return

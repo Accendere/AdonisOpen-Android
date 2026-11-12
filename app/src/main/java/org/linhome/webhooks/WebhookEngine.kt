@@ -155,6 +155,7 @@ class WebhookEngine(
      * or clears it when the link had no (usable) webhook fields.
      */
     fun onLinkApplied(config: WebhookConfig?, enabled: Boolean) {
+        val previous = storage.config
         storage.config = config
         setStatus(WebhookStatus.ACTIVE)
         stateJob?.cancel()
@@ -171,8 +172,88 @@ class WebhookEngine(
         } else {
             info("Setup link applied: $config")
             sendState(enabled)
+            // The person's own changes are gone: tell the site, so what it showed its admins is settled.
+            if (previous?.editedLocally == true && WebhookConfig.sameServer(previous.baseUrl, config.baseUrl)) {
+                reportSettings(config, config.sending, emptySet(), leaving = false)
+            }
         }
         updatePolling()
+    }
+
+    /** What [applyLocalEdit] did. */
+    enum class LocalEdit {
+        /** Saved; the events go to the same server as before, with the site's key. */
+        SAVED,
+
+        /** Saved; the events go to another server now, so the site's key was removed (a new setup code brings it back). */
+        SAVED_KEY_REMOVED,
+
+        /** The address isn't a usable `https://` address: nothing changed. */
+        INVALID_ADDRESS
+    }
+
+    /**
+     * The person changed the webhook settings in Settings: [events] are the ones the phone sends from now on, and
+     * [baseUrl] where. They have the last word (no event is locked by the site). On the same server the site's key
+     * stays; on another one it is removed, never sent there, and so are the events still queued for the old one.
+     *
+     * The site is told, once, with `webhook_settings` ([WebhookEvents.SETTINGS]): the events it asked for that are
+     * off now, and whether the phone is leaving it (sent to the old server, before the switch). Outside the queue on
+     * purpose: an older site answers 404 to an event it doesn't know, which in the queue would stop every call.
+     */
+    fun applyLocalEdit(events: Set<String>, baseUrl: String, enabled: Boolean): LocalEdit {
+        val current = storage.config ?: return LocalEdit.INVALID_ADDRESS
+        val url = WebhookConfig.normalizedHttpsUrl(baseUrl) ?: return LocalEdit.INVALID_ADDRESS
+        val leaving = !WebhookConfig.sameServer(current.baseUrl, url)
+        val known = events.filter { it in WebhookEvents.KNOWN }.toSet()
+        val asked = current.askedBySite
+        reportSettings(current, known, asked - known, leaving)
+        val updated = current.copy(
+            baseUrl = url,
+            events = known,
+            siteEvents = asked,
+            editedLocally = true,
+            token = if (leaving) "" else current.token,
+            auth = if (leaving) WebhookAuth.NONE else current.auth
+        )
+        storage.config = updated
+        info("Settings changed here: $updated")
+        if (leaving) {
+            eventsJob?.cancel()
+            eventsJob = null
+            eventsWaitingForRetry = false
+            storage.eventQueue = emptyList()
+            storage.pendingAcks = emptySet()
+            setStatus(WebhookStatus.ACTIVE)
+            sendState(enabled)
+        }
+        updatePolling()
+        return if (leaving) LocalEdit.SAVED_KEY_REMOVED else LocalEdit.SAVED
+    }
+
+    /** `webhook_settings` to [config]'s server: a few tries, and whatever it answers changes nothing here. */
+    private fun reportSettings(config: WebhookConfig, sending: Set<String>, off: Set<String>, leaving: Boolean) {
+        val fields = JSONObject()
+            .put("events", org.json.JSONArray(sending.sorted()))
+            .put("events_off", org.json.JSONArray(off.sorted()))
+            .put("leaving", leaving)
+        val request = WebhookProtocol.eventRequest(config, WebhookEvents.SETTINGS, fields, meta())
+        scope.launch {
+            for (attempt in 0 until 3) {
+                when (val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }) {
+                    is WebhookOutcome.Ok -> {
+                        info("webhook_settings sent")
+                        return@launch
+                    }
+                    is WebhookOutcome.Retry, is WebhookOutcome.TooMany -> delay(retryDelayMs(attempt))
+                    else -> {
+                        info("webhook_settings not taken by the site (${outcome.javaClass.simpleName}); nothing changes")
+                        return@launch
+                    }
+                }
+            }
+            warn("webhook_settings not sent after 3 tries")
+        }
     }
 
     /** The network came back: resend a state whose last send failed, right away. */

@@ -65,7 +65,9 @@ data class DeviceImport(
 data class WebhookImport(
     val incoming: WebhookConfig?,
     val change: ImportChange,
-    val differences: List<String>
+    val differences: List<String>,
+    /** The person changed the webhooks in Settings: importing these replaces their changes (the screen says so). */
+    val replacesLocalEdits: Boolean = false
 )
 
 /**
@@ -140,8 +142,9 @@ class ImportPlan(
          */
         fun compareWebhook(incoming: WebhookConfig?, current: WebhookConfig?, linkHasSip: Boolean): WebhookImport? {
             if (!linkHasSip) return null
+            val edited = current?.editedLocally == true
             if (incoming == null) {
-                return if (current == null) null else WebhookImport(null, ImportChange.REMOVED, emptyList())
+                return if (current == null) null else WebhookImport(null, ImportChange.REMOVED, emptyList(), edited)
             }
             if (current == null) return WebhookImport(incoming, ImportChange.NEW, emptyList())
             val differences = mutableListOf<String>()
@@ -151,7 +154,7 @@ class ImportPlan(
             if (incoming.auth != current.auth) differences += "auth"
             if (incoming.events != current.events) differences += "events"
             if (incoming.pollMode != current.pollMode || incoming.pollingIntervalSeconds != current.pollingIntervalSeconds) differences += "polling"
-            return WebhookImport(incoming, if (differences.isEmpty()) ImportChange.UNCHANGED else ImportChange.CHANGED, differences)
+            return WebhookImport(incoming, if (differences.isEmpty()) ImportChange.UNCHANGED else ImportChange.CHANGED, differences, edited)
         }
     }
 }

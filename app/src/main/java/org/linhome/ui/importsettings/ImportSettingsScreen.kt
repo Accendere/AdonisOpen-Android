@@ -230,6 +230,7 @@ class ImportSettingsScreen(
                     PollMode.NEVER -> Texts.get("import_webhook_poll_never")
                 }
                 changeNote(w.change, w.differences)?.let { lines += it }
+                if (w.replacesLocalEdits) lines += Texts.get("import_webhook_replaces_edits")
                 val row = check(cfg.displayHost, lines, webhook, w.change != ImportChange.UNCHANGED) { webhook = it; updateApply() }
                 container.addView(row)
                 container.addView(ChipGroup(activity).apply {

@@ -109,6 +109,19 @@ object Theme {
         return 0
     }
 
+    /**
+     * [key] of the active theme when that theme defines it, else [fallbackKey]: for a colour only some themes set
+     * (Dark's `color_v`, the Settings section headers; the light themes keep their accent tint `color_i`).
+     */
+    fun getColorOr(key: String, fallbackKey: String): Int = getColor(colorKeyOr(key, fallbackKey))
+
+    /** [key] when the active theme defines it, else [fallbackKey]: for the APIs that take a colour key. */
+    fun colorKeyOr(key: String, fallbackKey: String): String {
+        val activeTheme = if (LinhomeApplication.contextExists()) LinhomeApplication.corePreferences.appTheme else "orange"
+        val value = themeConfig.getString("colors.$activeTheme", key, null) ?: return fallbackKey
+        return if (runCatching { Color.parseColor(value) }.isSuccess) key else fallbackKey
+    }
+
     fun arbitraryValue(key: String, default: String): String {
         var result: String? = themeConfig.getString("arbitrary-values", key, null)
         if (result == null) {

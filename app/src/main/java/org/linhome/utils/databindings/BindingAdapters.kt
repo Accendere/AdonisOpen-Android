@@ -145,8 +145,36 @@ fun cornerRadius(view: CardView, radius: String) {
 /// Spinner
 ///////////////////////
 
+/**
+ * A spinner filled from `android:entries` draws its items with Android's own layout, in the system's text colour:
+ * black on the Dark theme's surfaces. This puts the same items in an adapter that colours them with the theme's
+ * text colour (color_b), the selected value and the list alike.
+ */
+class ThemedSpinnerAdapter(context: android.content.Context, items: List<String>) :
+    android.widget.ArrayAdapter<String>(context, android.R.layout.simple_spinner_item, items) {
+    init {
+        setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+    }
+
+    override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+        super.getView(position, convertView, parent).also { (it as? android.widget.TextView)?.setTextColor(Theme.getColor("color_b")) }
+
+    override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View =
+        super.getDropDownView(position, convertView, parent).also { (it as? android.widget.TextView)?.setTextColor(Theme.getColor("color_b")) }
+}
+
+/** Swaps the spinner's plain adapter for a [ThemedSpinnerAdapter] with the same items, keeping the selection. */
+fun themeSpinnerText(spinner: Spinner) {
+    val adapter = spinner.adapter ?: return
+    if (adapter is ThemedSpinnerAdapter) return
+    val selected = spinner.selectedItemPosition
+    spinner.adapter = ThemedSpinnerAdapter(spinner.context, (0 until adapter.count).map { adapter.getItem(it)?.toString() ?: "" })
+    if (selected in 0 until adapter.count) spinner.setSelection(selected, false)
+}
+
 @BindingAdapter("popupBackgoundColor", "popupBackgoundRadius")
 fun background(view: Spinner, colorKey: String, radius: Float) {
+    themeSpinnerText(view)
     view.setPopupBackgroundDrawable(
         Theme.roundRectGradientDrawable(
             Theme.getColor(colorKey),
@@ -495,6 +523,7 @@ fun refresh(view: RecyclerView, device: Device?) {
 
 @BindingAdapter("selectedIndex", "settingListener")
 fun spinnerSetting(spinner: Spinner, selectedIndex: Int, listener: SettingListener) {
+    themeSpinnerText(spinner)
     spinner.setSelection(selectedIndex, true)
 
     spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {

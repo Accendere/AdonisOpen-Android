@@ -308,4 +308,93 @@ class WebhookEngineTest {
         assertEquals("ring", received.single().getString("type"))
         engine.shutdown()
     }
+
+    private val edited = config.copy(events = setOf(WebhookEvents.DOOR_ACTION, WebhookEvents.CALLS_PAUSED, WebhookEvents.CALL_SUMMARY))
+
+    @Test
+    fun anEditOnTheSameServerKeepsTheKeyAndTellsTheSiteWhatIsOff() = runTest {
+        val transport = FakeTransport()
+        val storage = MemoryStorage(edited)
+        val engine = engine(storage, transport)
+        val result = engine.applyLocalEdit(setOf(WebhookEvents.CALL_SUMMARY), "https://site.example/hooks/", enabled = true)
+        runCurrent()
+        assertEquals(WebhookEngine.LocalEdit.SAVED, result)
+        val saved = storage.config!!
+        assertEquals("secret-token", saved.token)
+        assertEquals(setOf(WebhookEvents.CALL_SUMMARY), saved.events)
+        assertEquals(edited.events, saved.siteEvents)
+        assertTrue(saved.editedLocally)
+        val report = transport.requests.single()
+        assertEquals("https://site.example/hooks/webhook_settings", report.url)
+        val body = JSONObject(report.body)
+        assertEquals("[\"call_summary\"]", body.getJSONArray("events").toString())
+        assertEquals("[\"calls_paused\",\"door_action\"]", body.getJSONArray("events_off").toString())
+        assertEquals(false, body.getBoolean("leaving"))
+        engine.shutdown()
+    }
+
+    @Test
+    fun movingToAnotherServerTellsTheOldOneAndNeverSendsItTheKey() = runTest {
+        val transport = FakeTransport()
+        val storage = MemoryStorage(edited)
+        storage.eventQueue = listOf("""{"event":"door_action","fields":{},"at":"2026-11-12T10:00:00Z"}""")
+        storage.status = WebhookStatus.UNAUTHORIZED
+        val engine = engine(storage, transport)
+        val result = engine.applyLocalEdit(edited.sending, "https://mine.example:8443/in", enabled = true)
+        runCurrent()
+        assertEquals(WebhookEngine.LocalEdit.SAVED_KEY_REMOVED, result)
+        assertEquals("", storage.config!!.token)
+        assertEquals(WebhookAuth.NONE, storage.config!!.auth)
+        assertTrue("queued events for the old site are dropped", storage.eventQueue.isEmpty())
+        val report = transport.requests.first { it.url.endsWith("/webhook_settings") }
+        assertTrue("the report goes to the old site", report.url.startsWith("https://site.example/"))
+        assertEquals(true, JSONObject(report.body).getBoolean("leaving"))
+        transport.requests.filter { it.url.startsWith("https://mine.example") }.forEach {
+            assertFalse("no key to the new place", it.headers.containsKey("Authorization"))
+        }
+        engine.shutdown()
+    }
+
+    @Test
+    fun aSiteThatDoesNotKnowTheReportChangesNothing() = runTest {
+        val transport = FakeTransport()
+        transport.answers += HttpAnswer(404, "{}")
+        val storage = MemoryStorage(edited)
+        val engine = engine(storage, transport)
+        engine.applyLocalEdit(edited.sending, "https://site.example/hooks", enabled = true)
+        runCurrent()
+        assertEquals(WebhookStatus.ACTIVE, storage.status)
+        engine.shutdown()
+    }
+
+    @Test
+    fun aBadAddressChangesNothing() = runTest {
+        val storage = MemoryStorage(edited)
+        val engine = engine(storage, FakeTransport())
+        assertEquals(WebhookEngine.LocalEdit.INVALID_ADDRESS, engine.applyLocalEdit(emptySet(), "http://site.example/hooks", enabled = true))
+        assertEquals(edited, storage.config)
+        engine.shutdown()
+    }
+
+    @Test
+    fun aNewLinkAfterLocalChangesTellsTheSiteAllIsBack() = runTest {
+        val transport = FakeTransport()
+        val storage = MemoryStorage(edited.copy(events = setOf(WebhookEvents.CALL_SUMMARY), siteEvents = edited.events, editedLocally = true))
+        val engine = engine(storage, transport)
+        engine.onLinkApplied(edited, enabled = true)
+        runCurrent()
+        assertFalse(storage.config!!.editedLocally)
+        val report = JSONObject(transport.requests.single { it.url.endsWith("/webhook_settings") }.body)
+        assertEquals(0, report.getJSONArray("events_off").length())
+        engine.shutdown()
+    }
+
+    @Test
+    fun theTokenIsOnlyKeptOnTheSameServer() {
+        assertTrue(WebhookConfig.sameServer("https://a.example/x", "https://A.example:443/y"))
+        assertFalse(WebhookConfig.sameServer("https://a.example/x", "https://a.example:8124/x"))
+        assertFalse(WebhookConfig.sameServer("https://a.example/x", "https://b.example/x"))
+        assertEquals(null, WebhookConfig.normalizedHttpsUrl("https://user:pw@a.example/x"))
+        assertEquals("https://a.example/x", WebhookConfig.normalizedHttpsUrl(" https://a.example/x/ "))
+    }
 }

@@ -124,6 +124,14 @@
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Connection to the building: the webhooks (SettingsFragment.buildWebhooksCard() fills the body) -->
+        <LinearLayout
+            android:id="@+id/card_webhooks"
+            style="@style/SettingsCard">
+            <include android:id="@+id/header_webhooks" layout="@layout/settings_card_header" title='@{model.getText("settings_card_webhooks")}' />
+            <LinearLayout android:id="@+id/body_webhooks" style="@style/SettingsCardBody" />
+        </LinearLayout>
+
         <!-- Advanced -->
         <LinearLayout
             android:id="@+id/card_advanced"

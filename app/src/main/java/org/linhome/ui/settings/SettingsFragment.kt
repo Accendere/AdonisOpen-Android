@@ -70,6 +70,7 @@ class SettingsFragment : GenericFragment() {
         binding.lifecycleOwner = this
         setupCards()
         setupAboutLinks()
+        buildWebhooksCard()
         settingsViewModel.themeChangedEvent.observe(viewLifecycleOwner, Observer { changed ->
             if (changed) {
                 settingsViewModel.themeChangedEvent.value = false
@@ -83,14 +84,16 @@ class SettingsFragment : GenericFragment() {
 
     /**
      * The cards open and close by tapping their header; which ones are open is kept while the app runs. Every card
-     * starts closed, and its header is tinted with the accent (color_i, the chevron color_a), so it reads as a
-     * heading and not as one more setting on the white body (color_d).
+     * starts closed, and its header is tinted (color_v where the theme has one, Dark's lighter slate, else the
+     * accent tint color_i; the chevron color_a), so it reads as a heading and not as one more setting on the body
+     * (color_d).
      */
     private fun setupCards() {
         val cards = listOf(
             Triple("calls", binding.cardCalls, binding.headerCalls) to binding.bodyCalls,
             Triple("appearance", binding.cardAppearance, binding.headerAppearance) to binding.bodyAppearance,
             Triple("history", binding.cardHistory, binding.headerHistory) to binding.bodyHistory,
+            Triple("webhooks", binding.cardWebhooks, binding.headerWebhooks) to binding.bodyWebhooks,
             Triple("advanced", binding.cardAdvanced, binding.headerAdvanced) to binding.bodyAdvanced,
             Triple("diagnostics", binding.cardDiagnostics, binding.headerDiagnostics) to binding.bodyDiagnostics,
             Triple("about", binding.cardAbout, binding.headerAbout) to binding.bodyAbout
@@ -106,7 +109,7 @@ class SettingsFragment : GenericFragment() {
             val accent = Theme.getColor("color_a")
             header.cardHeader.background = android.graphics.drawable.RippleDrawable(
                 android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x40)),
-                android.graphics.drawable.ColorDrawable(Theme.getColor("color_i")),
+                android.graphics.drawable.ColorDrawable(Theme.getColorOr("color_v", "color_i")),
                 null
             )
             header.chevron.setColorFilter(accent)
@@ -121,6 +124,122 @@ class SettingsFragment : GenericFragment() {
                 val open = body.visibility != View.VISIBLE
                 openCards[key] = open
                 show(open)
+            }
+        }
+    }
+
+    /**
+     * The webhooks: one switch per event, with what stops working when it's off, and the address they go to. The
+     * person has the last word on what their phone sends (see WebhookEngine.applyLocalEdit()). Moving the address
+     * to another server removes the building's key from the phone, after a warning in plain words.
+     */
+    private fun buildWebhooksCard() {
+        val body = binding.bodyWebhooks
+        body.removeAllViews()
+        val ctx = requireContext()
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        fun text(value: String?, sizeSp: Float = 14f, colorKey: String = "color_g") = android.widget.TextView(ctx).apply {
+            this.text = value
+            textSize = sizeSp
+            setTextColor(Theme.getColor(colorKey))
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        val config = org.linhome.webhooks.Webhooks.config
+        if (config == null) {
+            body.addView(text(Texts.get("settings_webhooks_none")))
+            return
+        }
+        body.addView(text(Texts.get("settings_webhooks_intro", config.displayHost)))
+        if (config.editedLocally) body.addView(text(Texts.get("settings_webhooks_edited")))
+
+        val chosen = config.sending.toMutableSet()
+        val shown = org.linhome.webhooks.WebhookEvents.EDITABLE.filter { it in config.askedBySite || it in config.sending }
+        val save = com.google.android.material.button.MaterialButton(ctx).apply {
+            this.text = Texts.get("settings_webhooks_save")
+            isAllCaps = false
+            backgroundTintList = android.content.res.ColorStateList.valueOf(Theme.getColor("color_a"))
+            setTextColor(Theme.getColor("color_c"))
+            isEnabled = false
+            alpha = 0.5f
+        }
+        fun dirty() {
+            save.isEnabled = true
+            save.alpha = 1f
+        }
+        shown.forEach { event ->
+            val row = org.linhome.databinding.SettingsWidgetSwitchBinding.inflate(layoutInflater, body, false)
+            row.title = Texts.get("webhook_event_$event")
+            row.subtitle = Texts.get("webhook_event_${event}_desc")
+            row.checked = event in chosen
+            row.lifecycleOwner = viewLifecycleOwner
+            row.listener = SettingListenerStub()
+            row.executePendingBindings()
+            // Only now: setting the initial state above must not count as a change.
+            row.listener = object : SettingListenerStub() {
+                override fun onBoolValueChanged(newValue: Boolean) {
+                    if (newValue) chosen += event else chosen -= event
+                    dirty()
+                }
+            }
+            row.executePendingBindings()
+            // The widget scrolls its subtitle on one line; here it is a sentence to read: wrap it.
+            row.settingsSubtitle.apply {
+                isSingleLine = false
+                maxLines = 4
+                ellipsize = null
+                isSelected = false
+            }
+            body.addView(row.root)
+        }
+
+        body.addView(text(Texts.get("settings_webhooks_address"), 14f, "color_b"))
+        val address = android.widget.EditText(ctx).apply {
+            setText(config.baseUrl)
+            setSingleLine()
+            textSize = 14f
+            setTextColor(Theme.getColor("color_b"))
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_URI or android.text.InputType.TYPE_CLASS_TEXT
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) = dirty()
+            })
+        }
+        body.addView(android.widget.FrameLayout(ctx).apply {
+            setPadding(pad, 0, pad, 0)
+            addView(address)
+        })
+        body.addView(android.widget.FrameLayout(ctx).apply {
+            setPadding(pad, pad / 2, pad, pad / 2)
+            addView(save)
+        })
+
+        save.setOnClickListener {
+            val newAddress = address.text.toString()
+            val normalized = org.linhome.webhooks.WebhookConfig.normalizedHttpsUrl(newAddress)
+            if (normalized == null) {
+                DialogUtil.toast("settings_webhooks_invalid_address", long = true)
+                return@setOnClickListener
+            }
+            fun apply() {
+                val result = org.linhome.webhooks.Webhooks.applyLocalEdit(chosen.toSet(), normalized, LinhomeApplication.corePreferences.appEnabled)
+                when (result) {
+                    org.linhome.webhooks.WebhookEngine.LocalEdit.SAVED -> DialogUtil.toast("settings_webhooks_saved")
+                    org.linhome.webhooks.WebhookEngine.LocalEdit.SAVED_KEY_REMOVED -> DialogUtil.toast("settings_webhooks_saved_elsewhere", long = true)
+                    else -> DialogUtil.toast("settings_webhooks_invalid_address", long = true)
+                }
+                buildWebhooksCard()
+            }
+            if (org.linhome.webhooks.WebhookConfig.sameServer(config.baseUrl, normalized)) {
+                apply()
+            } else {
+                val newHost = runCatching { java.net.URI(normalized).host }.getOrNull() ?: normalized
+                androidx.appcompat.app.AlertDialog.Builder(ctx)
+                    .setTitle(Texts.get("settings_webhooks_elsewhere_title"))
+                    .setMessage(Texts.get("settings_webhooks_elsewhere_message", newHost, config.displayHost))
+                    .setPositiveButton(Texts.get("settings_webhooks_elsewhere_confirm")) { _, _ -> apply() }
+                    .setNegativeButton(Texts.get("cancel"), null)
+                    .show()
             }
         }
     }

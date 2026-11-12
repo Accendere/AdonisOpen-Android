@@ -82,6 +82,19 @@ object WebhookEvents {
     /** Not an event the site lists: the question the app asks when a call was answered elsewhere. */
     const val WHO_ANSWERED = "who_answered"
 
+    /**
+     * Not an event the site lists: the report the app sends when the person changed the webhook settings in
+     * Settings (`events`, `events_off`, `leaving`), so the site's admins know. Sent once, outside the queue, and a
+     * site that doesn't know it (an older Adonis answers 404) changes nothing: see [WebhookEngine.applyLocalEdit].
+     */
+    const val SETTINGS = "webhook_settings"
+
+    /** The events the person can switch on or off in Settings, in the order shown. */
+    val EDITABLE = listOf(
+        DOOR_ACTION, CALL_RINGING, CALL_PREVIEW, CALL_ANSWERED, CALL_DECLINED, CALL_ENDED, CALL_SUMMARY,
+        CALLS_PAUSED, CALLS_RESUMED, STATE, REGISTRATION, POLL, POLL_FOREGROUND
+    )
+
     val KNOWN = setOf(
         STATE, CALLS_PAUSED, CALLS_RESUMED, CALL_RINGING, CALL_PREVIEW, DOOR_ACTION, CALL_ANSWERED,
         CALL_DECLINED, CALL_ENDED, CALL_SUMMARY, REGISTRATION, POLL, POLL_FOREGROUND
@@ -107,8 +120,18 @@ data class WebhookConfig(
     val pollMode: PollMode = PollMode.NEVER,
     val pollingIntervalSeconds: Int = DEFAULT_POLLING_INTERVAL_SECONDS,
     val events: Set<String>? = null,
-    val auth: WebhookAuth = WebhookAuth.BEARER
+    val auth: WebhookAuth = WebhookAuth.BEARER,
+    /** What the site asked for in its link; [events] differs when the person changed it here. Null = [events]. */
+    val siteEvents: Set<String>? = null,
+    /** The person changed these settings in Settings (a new setup code replaces them, after a warning). */
+    val editedLocally: Boolean = false
 ) {
+    /** The events the site asked for: its link's list, else the old default (`state`). */
+    val askedBySite: Set<String> get() = siteEvents ?: events ?: setOf(WebhookEvents.STATE)
+
+    /** The events the phone sends now. */
+    val sending: Set<String> get() = events ?: setOf(WebhookEvents.STATE)
+
     /** Whether the site asked for [event]. An event it didn't list is never sent. */
     fun sends(event: String): Boolean = events?.contains(event) ?: (event == WebhookEvents.STATE)
 
@@ -125,9 +148,32 @@ data class WebhookConfig(
     val host: String? get() = runCatching { URI(baseUrl).host?.lowercase() }.getOrNull()
 
     override fun toString(): String =
-        "WebhookConfig(baseUrl=$baseUrl, user=$user, token=<hidden>, auth=${auth.wireName}, events=${events?.sorted()}, pollMode=${pollMode.wireName}, pollingIntervalSeconds=$pollingIntervalSeconds)"
+        "WebhookConfig(baseUrl=$baseUrl, user=$user, token=<hidden>, auth=${auth.wireName}, events=${events?.sorted()}, pollMode=${pollMode.wireName}, pollingIntervalSeconds=$pollingIntervalSeconds, editedLocally=$editedLocally)"
 
     companion object {
+        /**
+         * [url] as an address events may go to: `https://`, a host, no credentials, query or fragment; trailing
+         * slashes dropped. Null when it isn't one.
+         */
+        fun normalizedHttpsUrl(url: String): String? {
+            val trimmed = url.trim().trimEnd('/')
+            val uri = runCatching { URI(trimmed) }.getOrNull() ?: return null
+            if (!uri.scheme.equals("https", ignoreCase = true)) return null
+            if (uri.host.isNullOrBlank() || uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null) return null
+            return trimmed
+        }
+
+        /**
+         * Whether [a] and [b] are the same server (host and port): the site's key (the token) is only good there. A
+         * different path on the same server keeps it.
+         */
+        fun sameServer(a: String, b: String): Boolean {
+            val ua = runCatching { URI(a.trim()) }.getOrNull() ?: return false
+            val ub = runCatching { URI(b.trim()) }.getOrNull() ?: return false
+            fun port(u: URI) = if (u.port != -1) u.port else if (u.scheme.equals("http", ignoreCase = true)) 80 else 443
+            return ua.host?.lowercase() == ub.host?.lowercase() && ua.host != null && port(ua) == port(ub)
+        }
+
         const val MIN_POLLING_INTERVAL_SECONDS = 10
         const val DEFAULT_POLLING_INTERVAL_SECONDS = 60
 
