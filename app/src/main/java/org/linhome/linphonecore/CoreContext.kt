@@ -86,6 +86,8 @@ class CoreContext(
 ) {
     companion object {
         const val SILENT_ACCEPT_DURATION_MS = 30_000L
+        /** After the SDK's own stopForeground (about a second after its service starts); the later ones catch slow devices. */
+        val KEEP_ALIVE_CHECK_DELAYS_MS = listOf(3_000L, 10_000L, 30_000L)
     }
 
     var stopped = false
@@ -504,6 +506,7 @@ class CoreContext(
                     }
 
                     removeCallOverlay()
+                    if (state == Call.State.Released) ensureKeepAliveForeground("call released")
                 }
             }
             if (state == Call.State.Error && call.callLog?.dir == Call.Dir.Outgoing) {
@@ -699,17 +702,43 @@ class CoreContext(
     }
 
     private fun reAssertKeepAliveForegroundServiceAfterStartup() {
+        ensureKeepAliveForeground("startup")
+    }
+
+    /**
+     * With "Receive calls" on, the service must stay in the foreground, or Android cuts the app's network
+     * once it's in the background and the SIP registration fails (DNS "Operation not permitted").
+     * The SDK fights this: when its CoreService starts with no call, it starts the service as foreground
+     * and, about a second later, calls Service.stopForeground(true) itself, which skips our
+     * hideForegroundServiceNotification() override. A call ending can also leave the service without
+     * its keep-alive notification. So check a few times after these moments and start it again if it dropped.
+     */
+    fun ensureKeepAliveForeground(reason: String) {
         if (!corePreferences.keepServiceAlive || !Compatibility.hasPermission(context, POST_NOTIFICATIONS)) {
             return
         }
-        coroutineScope.launch {
-            delay(2000)
-            if (corePreferences.keepServiceAlive && core.callsNb == 0) {
-                org.linphone.core.tools.Log.i("[Context] Re-asserting keep alive foreground service notification after startup")
+        for (delayMs in KEEP_ALIVE_CHECK_DELAYS_MS) {
+            coroutineScope.launch {
+                delay(delayMs)
+                if (!corePreferences.keepServiceAlive || !corePreferences.appEnabled || core.callsNb > 0) {
+                    return@launch
+                }
+                val service = notificationsManager.service
+                if (service != null && isRunningInForeground(service)) {
+                    return@launch
+                }
+                org.linphone.core.tools.Log.w("[Context] Keep alive foreground service is not running ($reason, after ${delayMs} ms), starting it again")
                 notificationsManager.startForeground()
             }
         }
     }
+
+    private fun isRunningInForeground(service: android.app.Service): Boolean =
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            service.foregroundServiceType != 0
+        } else {
+            false // can't tell before Android 10; starting it again is harmless
+        }
 
     fun checkIfForegroundServiceNotificationCanBeRemovedAfterDelay(delayInMs: Long) {
         coroutineScope.launch {

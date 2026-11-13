@@ -52,7 +52,10 @@ class CoreService : CoreService() {
 
         coreContext.notificationsManager.serviceCreated(this)
 
-        return super.onStartCommand(intent, flags, startId)
+        val result = super.onStartCommand(intent, flags, startId)
+        // super schedules the SDK's own foreground start + stop when there's no call; put ours back after it.
+        coreContext.ensureKeepAliveForeground("service started")
+        return result
     }
 
     override fun createServiceNotificationChannel() {
