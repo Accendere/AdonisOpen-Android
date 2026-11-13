@@ -61,8 +61,8 @@ android {
         applicationId "org.probonis"
         minSdkVersion 23
         targetSdkVersion 36
-        versionCode 43
-        versionName "2.0.2"
+        versionCode 44
+        versionName "2.0.3"
         buildConfigField "String", "GIT_HASH", "\"${gitShortHash}\""
         // The Linhome release this fork started from, shown on the About screen.
         buildConfigField "String", "LINHOME_BASE_VERSION", "\"1.5.0\""
