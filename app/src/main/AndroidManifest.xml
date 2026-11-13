@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Helps filling notification_phone number and country code in assistant -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
@@ -47,6 +48,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- The Linphone SDK asks for dataSync for its PushService and FileTransferService, which this app
+         doesn't declare, so nothing here can start a dataSync service. Dropped so Play needs no declaration for it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:node="remove" />
 
 
     <application
