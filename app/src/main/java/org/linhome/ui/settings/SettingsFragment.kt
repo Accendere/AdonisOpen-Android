@@ -148,7 +148,9 @@ class SettingsFragment : GenericFragment() {
             return
         }
         sites.forEach { site ->
-            addSiteCard(container, "site_${site.id}", site.displayName) { body -> buildSiteBody(body, site) }
+            // A site without a name (an older Adonis) would show its server's address; a lone one keeps the plain title.
+            val title = if (site.name.isNullOrBlank() && sites.size == 1) Texts.get("settings_card_webhooks") else site.displayName
+            addSiteCard(container, "site_${site.id}", title) { body -> buildSiteBody(body, site) }
         }
     }
 
