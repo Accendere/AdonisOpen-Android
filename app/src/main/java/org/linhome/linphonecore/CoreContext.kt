@@ -480,6 +480,14 @@ class CoreContext(
             } else if (state == Call.State.OutgoingInit || state == Call.State.OutgoingProgress) {
                 onOutgoingStarted(call)
             } else if (state == Call.State.Connected) {
+                // The keep-alive service runs as special use; the call needs the phone call + microphone (+ camera)
+                // types, or Android silences the microphone as soon as the app leaves the screen. The SDK would
+                // switch it, but it skips that because it still believes its own foreground start is active.
+                if (corePreferences.keepServiceAlive && notificationsManager.service != null &&
+                    Compatibility.hasPermission(context, POST_NOTIFICATIONS)) {
+                    Log.i("[Context] Call connected, switching the foreground service to the call types")
+                    notificationsManager.startForeground()
+                }
                 if (isVibrating) {
                     Log.i("[Context] Stopping vibration")
                     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
@@ -506,7 +514,15 @@ class CoreContext(
                     }
 
                     removeCallOverlay()
-                    if (state == Call.State.Released) ensureKeepAliveForeground("call released")
+                    // End/Error, not Released: Released only comes once the Call object is freed, which can be much later.
+                    if (state != Call.State.Released) {
+                        // Back from the call types to special use (no call = no microphone or camera type).
+                        if (corePreferences.keepServiceAlive && corePreferences.appEnabled && notificationsManager.service != null &&
+                            Compatibility.hasPermission(context, POST_NOTIFICATIONS)) {
+                            notificationsManager.startForeground()
+                        }
+                        ensureKeepAliveForeground("call ended")
+                    }
                 }
             }
             if (state == Call.State.Error && call.callLog?.dir == Call.Dir.Outgoing) {

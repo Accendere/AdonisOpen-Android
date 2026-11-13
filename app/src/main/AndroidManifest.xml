@@ -47,6 +47,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <!-- Android 14+ only lets a service run with the phoneCall type if the app also holds this (or is the
+         dialer). Without it the call can't move the service to phoneCall + microphone, and Android silences
+         the microphone as soon as the app leaves the screen. Normal permission, granted at install. -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- The Linphone SDK asks for dataSync for its PushService and FileTransferService, which this app
          doesn't declare, so nothing here can start a dataSync service. Dropped so Play needs no declaration for it. -->
