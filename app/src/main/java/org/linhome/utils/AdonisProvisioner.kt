@@ -369,7 +369,7 @@ object AdonisProvisioner {
         // The link's site: its webhooks are compared with that site's connection (none for a new site).
         val site = Webhooks.resolveLink(config.siteId, config.webhook, linkHasSip = config.sip != null)
         val webhook = ImportPlan.compareWebhook(config.webhook, site.existing?.let { Webhooks.config(it.id) }, linkHasSip = config.sip != null)
-        return ImportPlan(sip, devices, webhook, site)
+        return ImportPlan(sip, devices, webhook, site, phoneHasSites = Webhooks.siteList().isNotEmpty())
     }
 
     /** Applies the parts of [config] that [selection] keeps (the import screen). */

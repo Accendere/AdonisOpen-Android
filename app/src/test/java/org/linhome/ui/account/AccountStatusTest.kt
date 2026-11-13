@@ -69,6 +69,28 @@ class AccountStatusTest {
     }
 
     @Test
+    fun siteLabelWithNoOneOrSeveralSites() {
+        // None: the name remembered with the account, if any.
+        assertEquals("Old name", AccountStatus.siteLabel(emptyList(), "Old name"))
+        assertNull(AccountStatus.siteLabel(emptyList(), null))
+        // One: its name, whatever the remembered one says.
+        assertEquals("Alameda", AccountStatus.siteLabel(listOf("Alameda"), "Lumiar"))
+        // Several: joined; a site without a name is left out.
+        assertEquals("Alameda · Lumiar", AccountStatus.siteLabel(listOf("Alameda", "Lumiar"), "Old name"))
+        assertEquals("Alameda · Lumiar", AccountStatus.siteLabel(listOf("Alameda", null, " ", "Lumiar"), null))
+        // Sites with no names at all: as with none.
+        assertEquals("Old name", AccountStatus.siteLabel(listOf(null), "Old name"))
+    }
+
+    @Test
+    fun theCardTitleCarriesTheSiteLabel() {
+        val label = AccountStatus.siteLabel(listOf("Alameda", "Lumiar"), null)
+        assertEquals("pedro · Alameda · Lumiar", AccountStatus.title("pedro", label, "sip.example.org"))
+        assertEquals("pedro · Alameda", AccountStatus.title("pedro", AccountStatus.siteLabel(listOf("Alameda"), null), "sip.example.org"))
+        assertEquals("pedro · sip.example.org", AccountStatus.title("pedro", AccountStatus.siteLabel(emptyList(), null), "sip.example.org"))
+    }
+
+    @Test
     fun titleIsUserAndSiteElseDomain() {
         assertEquals("pedro · Alameda", AccountStatus.title("pedro", "Alameda", "sip.example.org"))
         assertEquals("pedro · sip.example.org", AccountStatus.title("pedro", null, "sip.example.org"))

@@ -75,6 +75,14 @@ object AccountStatus {
         return (progressSinceMs + CONNECTING_DELAY_MS - nowMs).coerceAtLeast(0)
     }
 
+    /**
+     * What the card calls the place: the site's name with one site, the names joined with " · " with several (sites
+     * without a name are left out). With none, [fallback] (the name remembered with the account, if any).
+     */
+    fun siteLabel(siteNames: List<String?>, fallback: String?): String? =
+        siteNames.mapNotNull { it?.trim()?.takeIf { name -> name.isNotEmpty() } }
+            .takeIf { it.isNotEmpty() }?.joinToString(" · ") ?: fallback
+
     /** The card's one line: "pedro · Alameda" (the site's name when known, else the SIP domain). */
     fun title(username: String?, siteName: String?, domain: String?): String {
         val where = siteName?.takeIf { it.isNotBlank() } ?: domain.orEmpty()

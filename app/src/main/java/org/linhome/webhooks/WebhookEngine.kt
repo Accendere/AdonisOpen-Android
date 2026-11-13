@@ -256,6 +256,34 @@ class WebhookEngine(
         }
     }
 
+    /**
+     * The phone is leaving this site for good: tells it `state` with enabled=false, so its Campainha card stops
+     * showing the phone as taking calls. Best effort, a few tries, outside the queue and the state job (the caller
+     * clears and shuts the engine right after, which must not cancel it). Call it BEFORE the connection is cleared.
+     * If the app dies during the retries the site keeps its last state, as when a phone is simply uninstalled.
+     */
+    fun sendFinalState() {
+        val current = storage.config ?: return
+        if (storage.status != WebhookStatus.ACTIVE) return
+        val request = WebhookProtocol.stateRequest(current, false, meta()) ?: return
+        scope.launch {
+            for (attempt in 0 until 3) {
+                when (val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }) {
+                    is WebhookOutcome.Ok -> {
+                        info("Final state (enabled=false) sent to the site being removed")
+                        return@launch
+                    }
+                    is WebhookOutcome.Retry, is WebhookOutcome.TooMany -> delay(retryDelayMs(attempt))
+                    else -> {
+                        info("Final state not taken by the site (${outcome.javaClass.simpleName})")
+                        return@launch
+                    }
+                }
+            }
+            warn("Final state not sent after 3 tries")
+        }
+    }
+
     /** The network came back: resend a state whose last send failed, right away. */
     fun onNetworkAvailable() {
         if (eventsWaitingForRetry) {

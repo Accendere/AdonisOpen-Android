@@ -145,15 +145,19 @@ class SiteWebhooks(
     }
 
     /**
-     * Forgets [siteId]: its connection, its queued events (dropped, never sent) and its door mappings. Returns the
+     * Forgets [siteId]: tells it enabled=false one last time (best effort), then drops its connection, its queued
+     * events (never sent) and its door mappings. Returns the
      * door keys it had (the caller removes those doors from the phone when asked to).
      */
     fun removeSite(siteId: String): List<String>? {
         val site = registry.find(siteId) ?: return null
-        engines.remove(site.slot)?.let { engine ->
-            engine.onLinkApplied(null, false)
-            engine.shutdown()
-        }
+        // The site hears enabled=false first (the request is built before the connection is cleared below), so
+        // its card stops showing this phone as taking calls.
+        val engine = engine(site)
+        engines.remove(site.slot)
+        engine.sendFinalState()
+        engine.onLinkApplied(null, false)
+        engine.shutdown()
         val removed = registry.remove(siteId) ?: return null
         forgetStorage(site)
         info("Site ${site.id} removed (${removed.second.size} door(s))")

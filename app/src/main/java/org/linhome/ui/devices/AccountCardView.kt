@@ -42,6 +42,7 @@ import org.linhome.ui.account.AccountStatus
 import org.linhome.ui.account.Registration
 import org.linhome.ui.widgets.LRoundRectButton
 import org.linhome.utils.SiteInfo
+import org.linhome.webhooks.Webhooks
 
 /**
  * The account card at the top of the Doors tab. Configured: one discreet line (`pedro · Alameda`, a status dot,
@@ -106,7 +107,9 @@ class AccountCardView @JvmOverloads constructor(
         )
         val identity = account?.params?.identityAddress
         val domain = identity?.domain
-        val title = AccountStatus.title(identity?.username, SiteInfo.name(context), domain)
+        // The sites' names (SiteInfo, the one name every link used to overwrite, only when there are no sites).
+        val siteLabel = AccountStatus.siteLabel(Webhooks.siteList().map { it.name }, SiteInfo.name(context))
+        val title = AccountStatus.title(identity?.username, siteLabel, domain)
         val reason = snapshot?.reason ?: account?.errorInfo?.phrase?.takeIf { it.isNotBlank() }
         val key = listOf(mode.name, title, domain, reason, callsEnabled, pausedAt).joinToString("|")
         if (mode != shownMode || key != shownKey) {

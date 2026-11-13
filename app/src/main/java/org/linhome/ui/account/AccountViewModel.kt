@@ -82,7 +82,7 @@ class AccountViewModel : ViewModel() {
         } else {
             current.state?.toHumanReadable()
         }
-        val site = SiteInfo.name(LinhomeApplication.instance)
+        val site = AccountStatus.siteLabel(org.linhome.webhooks.Webhooks.siteList().map { it.name }, SiteInfo.name(LinhomeApplication.instance))
         details.value = listOfNotNull(
             site?.let { Texts.get("account_site", it) },
             current.params?.transport?.name?.uppercase()?.let { Texts.get("account_transport", it) },

@@ -95,6 +95,78 @@ class ImportPlanTest {
         assertNull(ImportPlan.compareWebhook(null, null, true))
     }
 
+    private val known = org.linhome.sites.Site(1, "alameda_hass", "Alameda")
+
+    @Test
+    fun siteLabelForANewSiteUsesTheLinksName() {
+        val plan = ImportPlan(null, emptyList(), null, org.linhome.sites.LinkSite("lumiar_hass", null))
+        assertTrue(plan.site!!.isNew)
+        assertEquals("Lumiar", plan.siteLabel(" Lumiar "))
+        // No name in the link: the key.
+        assertEquals("lumiar_hass", plan.siteLabel(null))
+    }
+
+    @Test
+    fun siteLabelForAKnownSiteFallsBackToItsName() {
+        val plan = ImportPlan(null, emptyList(), null, org.linhome.sites.LinkSite("alameda_hass", known))
+        assertFalse(plan.site!!.isNew)
+        assertEquals("Alameda", plan.siteLabel(null))
+        assertEquals("Alameda 2", plan.siteLabel("Alameda 2"))
+    }
+
+    @Test
+    fun aRekeyedSiteIsKnownNotNew() {
+        val byServer = org.linhome.sites.Site(1, "alameda.example:443", "Alameda")
+        val plan = ImportPlan(null, emptyList(), null, org.linhome.sites.LinkSite("alameda_hass", byServer, rekeyFrom = byServer.id))
+        assertFalse(plan.site!!.isNew)
+        assertEquals("alameda.example:443", plan.site!!.rekeyFrom)
+        assertEquals("Alameda", plan.siteLabel(null))
+    }
+
+    @Test
+    fun aLinkNamingNoSiteHasNoSiteLine() {
+        assertNull(ImportPlan(null, emptyList(), null, org.linhome.sites.LinkSite(null, null)).siteLabel("X"))
+        assertNull(ImportPlan(null, emptyList(), null).siteLabel("X"))
+    }
+
+    private fun anotherAccount() = ImportPlan.compareSip(incoming, CurrentSip("miguel", "sip.example", null, "tls", "pw"))
+
+    @Test
+    fun anotherAccountKeepsTheCurrentOneWhenThePhoneHasSites() {
+        val plan = ImportPlan(anotherAccount(), emptyList(), null, phoneHasSites = true)
+        assertTrue(plan.keepsCurrentAccountByDefault)
+        assertFalse(plan.defaultSelection().sip)
+    }
+
+    @Test
+    fun anotherAccountReplacesTheCurrentOneWhenThePhoneHasNoSite() {
+        val plan = ImportPlan(anotherAccount(), emptyList(), null, phoneHasSites = false)
+        assertFalse(plan.keepsCurrentAccountByDefault)
+        assertTrue(plan.defaultSelection().sip)
+    }
+
+    @Test
+    fun theSameAccountWithANewPasswordIsStillAppliedWithSites() {
+        val sip = ImportPlan.compareSip(incoming, CurrentSip("pedro", "sip.example", null, "tls", "old"))
+        val plan = ImportPlan(sip, emptyList(), null, phoneHasSites = true)
+        assertFalse(plan.keepsCurrentAccountByDefault)
+        assertTrue(plan.defaultSelection().sip)
+    }
+
+    @Test
+    fun keepingTheAccountStillImportsTheRest() {
+        val hook = WebhookConfig("https://site.example/h", "pedro", "tok", events = setOf("call_summary"))
+        val plan = ImportPlan(
+            anotherAccount(), listOf(DeviceImport(0, AdonisDeviceConfig("Porta", "porta"), ImportChange.NEW, emptyList(), null)),
+            WebhookImport(hook, ImportChange.NEW, emptyList()), phoneHasSites = true
+        )
+        val selection = plan.defaultSelection()
+        assertFalse(selection.sip)
+        assertEquals(setOf(0), selection.devices)
+        assertTrue(selection.webhook)
+        assertFalse(selection.isEmpty)
+    }
+
     @Test
     fun emptySelection() {
         assertTrue(ImportSelection(false, emptySet(), false).isEmpty)

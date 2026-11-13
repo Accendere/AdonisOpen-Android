@@ -144,17 +144,22 @@ class ImportSettingsScreen(
         } else {
             summary.addView(text(Texts.get("import_summary_intro"), 15f).withMargins(top = 4, bottom = 8))
         }
+        plan.siteLabel(config.siteName)?.let { name ->
+            summary.addView(bullet(Texts.get(if (plan.site?.isNew == true) "import_site_new" else "import_site_known", name)))
+        }
         plan.sip?.let { s ->
             val line = when (s.change) {
                 ImportChange.NEW -> Texts.get("import_sip_new", s.incoming.username + "@" + s.incoming.domain)
                 ImportChange.UNCHANGED -> Texts.get("import_sip_unchanged", s.incoming.username + "@" + s.incoming.domain)
                 else -> when {
+                    // Another account while sites use the current one: kept unless the person ticks the account below.
+                    plan.keepsCurrentAccountByDefault && !sip -> Texts.get("import_sip_kept", s.replaces!!)
                     s.replaces != null -> Texts.get("import_sip_replaces", s.incoming.username + "@" + s.incoming.domain, s.replaces)
                     s.differences == listOf("password") -> Texts.get("import_sip_password_changed", s.incoming.username + "@" + s.incoming.domain)
                     else -> Texts.get("import_sip_changed", s.incoming.username + "@" + s.incoming.domain, s.differences.joinToString(", ") { label(it) })
                 }
             }
-            summary.addView(bullet(line, warn = s.replaces != null))
+            summary.addView(bullet(line, warn = s.replaces != null && sip))
         }
         if (plan.devices.isNotEmpty()) {
             val new = plan.devices.count { it.change == ImportChange.NEW }
@@ -205,10 +210,15 @@ class ImportSettingsScreen(
                     Texts.get("import_transport", (s.incoming.transport ?: "udp").uppercase()),
                     s.incoming.proxy?.let { Texts.get("import_proxy", it) },
                     changeNote(s.change, s.differences),
-                    s.replaces?.let { Texts.get("import_replaces_account", it) }
+                    s.replaces?.let { Texts.get("import_replaces_account", it) },
+                    if (plan.keepsCurrentAccountByDefault) Texts.get("import_sip_one_account") else null
                 ),
                 checked = sip, enabled = s.change != ImportChange.UNCHANGED
-            ) { sip = it; updateApply() })
+            ) {
+                sip = it
+                fillSummary()
+                updateApply()
+            })
         }
         if (plan.devices.isNotEmpty()) {
             container.addView(sectionTitle(Texts.get("import_section_doors")))

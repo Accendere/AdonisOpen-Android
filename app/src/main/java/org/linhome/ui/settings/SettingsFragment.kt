@@ -37,6 +37,7 @@ import org.linhome.R
 import org.linhome.customisation.Texts
 import org.linhome.customisation.Theme
 import org.linhome.databinding.FragmentSettingsBinding
+import org.linhome.databinding.SettingsCardHeaderBinding
 import org.linhome.utils.DialogUtil
 import org.linphone.core.Core
 import org.linphone.core.PayloadType
@@ -70,7 +71,7 @@ class SettingsFragment : GenericFragment() {
         binding.lifecycleOwner = this
         setupCards()
         setupAboutLinks()
-        buildWebhooksCard()
+        buildSiteCards()
         settingsViewModel.themeChangedEvent.observe(viewLifecycleOwner, Observer { changed ->
             if (changed) {
                 settingsViewModel.themeChangedEvent.value = false
@@ -93,69 +94,144 @@ class SettingsFragment : GenericFragment() {
             Triple("calls", binding.cardCalls, binding.headerCalls) to binding.bodyCalls,
             Triple("appearance", binding.cardAppearance, binding.headerAppearance) to binding.bodyAppearance,
             Triple("history", binding.cardHistory, binding.headerHistory) to binding.bodyHistory,
-            Triple("webhooks", binding.cardWebhooks, binding.headerWebhooks) to binding.bodyWebhooks,
             Triple("advanced", binding.cardAdvanced, binding.headerAdvanced) to binding.bodyAdvanced,
             Triple("diagnostics", binding.cardDiagnostics, binding.headerDiagnostics) to binding.bodyDiagnostics,
             Triple("about", binding.cardAbout, binding.headerAbout) to binding.bodyAbout
         )
-        val radius = 16f * resources.displayMetrics.density
         for ((parts, body) in cards) {
             val (key, card, header) = parts
-            card.background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = radius
-                setColor(Theme.getColor("color_d"))
-            }
-            card.clipToOutline = true
-            val accent = Theme.getColor("color_a")
-            header.cardHeader.background = android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x40)),
-                android.graphics.drawable.ColorDrawable(Theme.getColorOr("color_v", "color_i")),
-                null
-            )
-            header.chevron.setColorFilter(accent)
-            fun show(open: Boolean) {
-                body.visibility = if (open) View.VISIBLE else View.GONE
-                header.chevron.rotation = if (open) 180f else 0f
-                header.cardHeader.contentDescription = header.cardTitle.text.toString() + ", " +
-                    Texts.get(if (open) "settings_card_expanded" else "settings_card_collapsed")
-            }
-            show(openCards[key] ?: false)
-            header.cardHeader.setOnClickListener {
-                val open = body.visibility != View.VISIBLE
-                openCards[key] = open
-                show(open)
-            }
+            styleCard(key, card, header, body)
+        }
+    }
+
+    /** One card's look and its open/closed state (see [setupCards]); also used for the site cards built at run time. */
+    private fun styleCard(key: String, card: View, header: SettingsCardHeaderBinding, body: View) {
+        val radius = 16f * resources.displayMetrics.density
+        card.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = radius
+            setColor(Theme.getColor("color_d"))
+        }
+        (card as? ViewGroup)?.clipToOutline = true
+        val accent = Theme.getColor("color_a")
+        header.cardHeader.background = android.graphics.drawable.RippleDrawable(
+            android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(accent, 0x40)),
+            android.graphics.drawable.ColorDrawable(Theme.getColorOr("color_v", "color_i")),
+            null
+        )
+        header.chevron.setColorFilter(accent)
+        fun show(open: Boolean) {
+            body.visibility = if (open) View.VISIBLE else View.GONE
+            header.chevron.rotation = if (open) 180f else 0f
+            header.cardHeader.contentDescription = header.cardTitle.text.toString() + ", " +
+                Texts.get(if (open) "settings_card_expanded" else "settings_card_collapsed")
+        }
+        show(openCards[key] ?: false)
+        header.cardHeader.setOnClickListener {
+            val open = body.visibility != View.VISIBLE
+            openCards[key] = open
+            show(open)
         }
     }
 
     /**
-     * The webhooks: one switch per event, with what stops working when it's off, and the address they go to. The
-     * person has the last word on what their phone sends (see WebhookEngine.applyLocalEdit()). Moving the address
-     * to another server removes the building's key from the phone, after a warning in plain words.
+     * One card per site (title = the site's name), each opened by tapping its header. With no site, one card says
+     * how to connect. See [buildSiteBody] for what a site's card holds.
      */
-    private fun buildWebhooksCard() {
-        val body = binding.bodyWebhooks
+    private fun buildSiteCards() {
+        val container = binding.siteCards
+        container.removeAllViews()
+        val sites = org.linhome.webhooks.Webhooks.siteList()
+        if (sites.isEmpty()) {
+            addSiteCard(container, "webhooks", Texts.get("settings_card_webhooks")) { body ->
+                body.addView(bodyText(Texts.get("settings_webhooks_none")))
+            }
+            return
+        }
+        sites.forEach { site ->
+            addSiteCard(container, "site_${site.id}", site.displayName) { body -> buildSiteBody(body, site) }
+        }
+    }
+
+    private fun addSiteCard(container: ViewGroup, key: String, title: String, fill: (android.widget.LinearLayout) -> Unit) {
+        val density = resources.displayMetrics.density
+        val card = android.widget.LinearLayout(requireContext()).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { bottomMargin = (12 * density).toInt() }
+        }
+        val header = SettingsCardHeaderBinding.inflate(layoutInflater, card, false)
+        header.title = title
+        header.executePendingBindings()
+        val body = android.widget.LinearLayout(requireContext(), null, 0, R.style.SettingsCardBody)
+        card.addView(header.root)
+        card.addView(body)
+        container.addView(card)
+        fill(body)
+        styleCard(key, card, header, body)
+    }
+
+    private fun bodyText(value: String?, sizeSp: Float = 14f, colorKey: String = "color_g") = android.widget.TextView(requireContext()).apply {
+        this.text = value
+        textSize = sizeSp
+        setTextColor(Theme.getColor(colorKey))
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        setPadding(pad, pad / 2, pad, pad / 2)
+    }
+
+    private fun switchRow(body: ViewGroup, title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+        val row = org.linhome.databinding.SettingsWidgetSwitchBinding.inflate(layoutInflater, body, false)
+        row.title = title
+        row.subtitle = subtitle
+        row.checked = checked
+        row.lifecycleOwner = viewLifecycleOwner
+        row.listener = SettingListenerStub()
+        row.executePendingBindings()
+        // Only now: setting the initial state above must not count as a change.
+        row.listener = object : SettingListenerStub() {
+            override fun onBoolValueChanged(newValue: Boolean) = onChange(newValue)
+        }
+        row.executePendingBindings()
+        // The widget scrolls its subtitle on one line; here it is a sentence to read: wrap it.
+        row.settingsSubtitle.apply {
+            isSingleLine = false
+            maxLines = 4
+            ellipsize = null
+            isSelected = false
+        }
+        body.addView(row.root)
+    }
+
+    /**
+     * A site's card: whether this phone takes calls from this site's doors, then (when the site has a connection)
+     * the webhooks: one switch per event, with what stops working when it's off, and the address they go to. The
+     * person has the last word on what their phone sends (see WebhookEngine.applyLocalEdit()). Moving the address
+     * to another server removes the building's key from the phone, after a warning in plain words. Last, removing
+     * the site.
+     */
+    private fun buildSiteBody(body: android.widget.LinearLayout, shown: org.linhome.sites.Site) {
         body.removeAllViews()
+        // Read again: the site may have changed since the card was built (it is rebuilt after a save).
+        val site = org.linhome.webhooks.Webhooks.siteList().firstOrNull { it.id == shown.id } ?: return
         val ctx = requireContext()
         val pad = (24 * resources.displayMetrics.density).toInt()
-        fun text(value: String?, sizeSp: Float = 14f, colorKey: String = "color_g") = android.widget.TextView(ctx).apply {
-            this.text = value
-            textSize = sizeSp
-            setTextColor(Theme.getColor(colorKey))
-            setPadding(pad, pad / 2, pad, pad / 2)
+        fun text(value: String?, sizeSp: Float = 14f, colorKey: String = "color_g") = bodyText(value, sizeSp, colorKey)
+
+        switchRow(body, Texts.get("settings_site_calls"), Texts.get("settings_site_calls_desc", site.displayName), site.callsEnabled) { on ->
+            org.linhome.webhooks.Webhooks.setSiteCallsEnabled(site.id, on)
         }
-        // One card for the first site with webhooks (with one site: "the" site), until each site gets its own card.
-        val site = org.linhome.webhooks.Webhooks.siteList().firstOrNull { org.linhome.webhooks.Webhooks.config(it.id) != null }
-        val config = site?.let { org.linhome.webhooks.Webhooks.config(it.id) }
-        if (site == null || config == null) {
+
+        val config = org.linhome.webhooks.Webhooks.config(site.id)
+        if (config == null) {
             body.addView(text(Texts.get("settings_webhooks_none")))
+            addRemoveSite(body, site)
             return
         }
         body.addView(text(Texts.get("settings_webhooks_intro", config.displayHost)))
         if (config.editedLocally) body.addView(text(Texts.get("settings_webhooks_edited")))
 
         val chosen = config.sending.toMutableSet()
-        val shown = org.linhome.webhooks.WebhookEvents.EDITABLE.filter { it in config.askedBySite || it in config.sending }
+        val editable = org.linhome.webhooks.WebhookEvents.EDITABLE.filter { it in config.askedBySite || it in config.sending }
         val save = com.google.android.material.button.MaterialButton(ctx).apply {
             this.text = Texts.get("settings_webhooks_save")
             isAllCaps = false
@@ -168,30 +244,11 @@ class SettingsFragment : GenericFragment() {
             save.isEnabled = true
             save.alpha = 1f
         }
-        shown.forEach { event ->
-            val row = org.linhome.databinding.SettingsWidgetSwitchBinding.inflate(layoutInflater, body, false)
-            row.title = Texts.get("webhook_event_$event")
-            row.subtitle = Texts.get("webhook_event_${event}_desc")
-            row.checked = event in chosen
-            row.lifecycleOwner = viewLifecycleOwner
-            row.listener = SettingListenerStub()
-            row.executePendingBindings()
-            // Only now: setting the initial state above must not count as a change.
-            row.listener = object : SettingListenerStub() {
-                override fun onBoolValueChanged(newValue: Boolean) {
-                    if (newValue) chosen += event else chosen -= event
-                    dirty()
-                }
+        editable.forEach { event ->
+            switchRow(body, Texts.get("webhook_event_$event"), Texts.get("webhook_event_${event}_desc"), event in chosen) { on ->
+                if (on) chosen += event else chosen -= event
+                dirty()
             }
-            row.executePendingBindings()
-            // The widget scrolls its subtitle on one line; here it is a sentence to read: wrap it.
-            row.settingsSubtitle.apply {
-                isSingleLine = false
-                maxLines = 4
-                ellipsize = null
-                isSelected = false
-            }
-            body.addView(row.root)
         }
 
         body.addView(text(Texts.get("settings_webhooks_address"), 14f, "color_b"))
@@ -230,7 +287,7 @@ class SettingsFragment : GenericFragment() {
                     org.linhome.webhooks.WebhookEngine.LocalEdit.SAVED_KEY_REMOVED -> DialogUtil.toast("settings_webhooks_saved_elsewhere", long = true)
                     else -> DialogUtil.toast("settings_webhooks_invalid_address", long = true)
                 }
-                buildWebhooksCard()
+                buildSiteBody(body, site)
             }
             if (org.linhome.webhooks.WebhookConfig.sameServer(config.baseUrl, normalized)) {
                 apply()
@@ -244,6 +301,34 @@ class SettingsFragment : GenericFragment() {
                     .show()
             }
         }
+        addRemoveSite(body, site)
+    }
+
+    /** "Remove this site", after a confirmation: its connection and doors go, the SIP account stays. */
+    private fun addRemoveSite(body: android.widget.LinearLayout, site: org.linhome.sites.Site) {
+        val ctx = requireContext()
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val remove = com.google.android.material.button.MaterialButton(ctx, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = Texts.get("settings_site_remove")
+            isAllCaps = false
+            setTextColor(Theme.getColor("color_e"))
+            strokeColor = android.content.res.ColorStateList.valueOf(Theme.getColor("color_e"))
+            setOnClickListener {
+                androidx.appcompat.app.AlertDialog.Builder(ctx)
+                    .setTitle(Texts.get("settings_site_remove_title", site.displayName))
+                    .setMessage(Texts.get("settings_site_remove_message", site.displayName))
+                    .setPositiveButton(Texts.get("settings_site_remove_confirm")) { _, _ ->
+                        org.linhome.webhooks.Webhooks.removeSite(site.id, removeDoors = true)
+                        buildSiteCards()
+                    }
+                    .setNegativeButton(Texts.get("cancel"), null)
+                    .show()
+            }
+        }
+        body.addView(android.widget.FrameLayout(ctx).apply {
+            setPadding(pad, pad / 2, pad, pad / 2)
+            addView(remove)
+        })
     }
 
     private fun setupAboutLinks() {

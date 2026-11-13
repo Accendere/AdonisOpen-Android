@@ -259,7 +259,56 @@ class SiteWebhooksTest {
         assertEquals(listOf("lumiar_hass"), s.registry.sites().map { it.id })
         s.hub.sendCallEvent("alameda_hass", WebhookEvents.CALL_RINGING, JSONObject())
         runCurrent()
-        assertTrue(s.transport.to("alameda.example").isEmpty())
+        // Only the farewell state; the queued ringing event and the new one never go.
+        assertEquals(listOf("state"), s.transport.events("alameda.example"))
+    }
+
+    @Test
+    fun removingASiteTellsItEnabledFalseThenDropsTheConnection() = runTest {
+        val s = setup()
+        val slot = s.registry.find("alameda_hass")!!.slot
+        s.hub.removeSite("alameda_hass")
+        // The connection is gone at once, yet the farewell goes with the key it had.
+        assertNull(s.storages[slot]!!.config)
+        runCurrent()
+        assertEquals(listOf(false), s.transport.states("alameda.example"))
+        assertTrue(s.transport.to("alameda.example").single().headers.values.any { it.contains("token-alameda.example") })
+        // The other site hears nothing.
+        assertTrue(s.transport.to("lumiar.example").isEmpty())
+    }
+
+    @Test
+    fun removingASiteWithoutAConnectionSendsNothing() = runTest {
+        val s = setup(sites = listOf("alameda_hass" to null, "lumiar_hass" to "lumiar.example"))
+        assertEquals(emptyList<String>(), s.hub.removeSite("alameda_hass"))
+        runCurrent()
+        assertTrue(s.transport.requests.isEmpty())
+        assertEquals(listOf("lumiar_hass"), s.registry.sites().map { it.id })
+    }
+
+    @Test
+    fun theSettingsSwitchPausesOneSiteAndSipStaysUntilAllArePaused() = runTest {
+        val s = setup()
+        // What Webhooks.setSiteCallsEnabled(), the Settings card's switch, does.
+        assertTrue(s.hub.setSiteCallsEnabled("alameda_hass", false))
+        runCurrent()
+        assertEquals(listOf(false), s.transport.states("alameda.example"))
+        assertTrue(s.transport.states("lumiar.example").isEmpty())
+        assertFalse(s.hub.config("alameda_hass") == null)
+        assertTrue(s.registry.registrationWanted(true))
+        assertEquals(listOf("alameda_hass"), s.registry.pausedSites(true).map { it.id })
+
+        assertTrue(s.hub.setSiteCallsEnabled("lumiar_hass", false))
+        runCurrent()
+        assertFalse(s.registry.registrationWanted(true))
+        assertTrue(s.registry.pausedSites(true).isEmpty())
+
+        // And back on: only that site is told.
+        assertTrue(s.hub.setSiteCallsEnabled("alameda_hass", true))
+        runCurrent()
+        assertEquals(listOf(false, true), s.transport.states("alameda.example"))
+        assertEquals(listOf(false), s.transport.states("lumiar.example"))
+        assertTrue(s.registry.registrationWanted(true))
     }
 
     @Test

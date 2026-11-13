@@ -84,11 +84,26 @@ class ImportPlan(
      * Which site the link is for ([LinkSite.isNew], or [LinkSite.existing] whose connection it replaces); null when
      * not resolved (tests). [LinkSite.key] null: the link names no site.
      */
-    val site: LinkSite? = null
+    val site: LinkSite? = null,
+    /** The phone already has at least one site (so its one SIP account is shared with them). */
+    val phoneHasSites: Boolean = false
 ) {
+    /**
+     * The link brings another SIP account than the phone's while sites already use it: the phone has one account
+     * for all its sites, so replacing it affects the others. Not replaced unless the person ticks it.
+     */
+    val keepsCurrentAccountByDefault: Boolean
+        get() = phoneHasSites && sip != null && sip.change != ImportChange.UNCHANGED && sip.replaces != null
+
+    /** The site's name for the "Adds"/"Updates" line: the link's name, else the known site's name, else its key. */
+    fun siteLabel(linkSiteName: String?): String? {
+        val key = site?.key ?: return null
+        return linkSiteName?.trim()?.takeIf { it.isNotEmpty() } ?: site.existing?.displayName ?: key
+    }
+
     /** What is selected by default: everything that changes something, nothing that is unchanged. */
     fun defaultSelection() = ImportSelection(
-        sip = sip != null && sip.change != ImportChange.UNCHANGED,
+        sip = sip != null && sip.change != ImportChange.UNCHANGED && !keepsCurrentAccountByDefault,
         devices = devices.filter { it.change != ImportChange.UNCHANGED }.map { it.index }.toSet(),
         webhook = webhook != null && webhook.change != ImportChange.UNCHANGED
     )
