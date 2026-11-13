@@ -79,6 +79,11 @@ data class AdonisConfig(
     val claimUrl: String? = null,
     /** The site's display name when known (LAN pairing's announcement, or the setup's optional `site_name`). */
     val siteName: String? = null,
+    /**
+     * The site's stable id (`site_id`, the hub-sync host id, e.g. `alameda_hass`); null from an Adonis that doesn't
+     * send it (then the webhook server keys the site, see [org.linhome.sites.SiteRegistry.resolveLink]).
+     */
+    val siteId: String? = null,
     /** Where the setup came from, for the import screen's header; null when unknown. */
     val source: ImportSource? = null
 )
@@ -262,7 +267,10 @@ object AdonisProvisioner {
                 sip = sipConfig,
                 devices = devicesList,
                 webhook = webhook,
-                siteName = root.optString("site_name").trim().take(80).ifEmpty { null }
+                siteName = root.optString("site_name").trim().take(80).ifEmpty { null },
+                siteId = org.linhome.sites.SiteRegistry.validSiteId(root.optString("site_id", "")).also { id ->
+                    if (id == null && root.optString("site_id", "").isNotBlank()) Log.w("$TAG Ignoring the link's site_id: not [a-z0-9_-]{1,64}")
+                }
             )
         } catch (e: Exception) {
             Log.e("$TAG Error parsing JSON config: $e")
@@ -358,8 +366,10 @@ object AdonisProvisioner {
                 mappedActions = mapActions(dev.actions).map { (it.type ?: "") to it.vcardValue() }
             )
         }
-        val webhook = ImportPlan.compareWebhook(config.webhook, Webhooks.config, linkHasSip = config.sip != null)
-        return ImportPlan(sip, devices, webhook)
+        // The link's site: its webhooks are compared with that site's connection (none for a new site).
+        val site = Webhooks.resolveLink(config.siteId, config.webhook, linkHasSip = config.sip != null)
+        val webhook = ImportPlan.compareWebhook(config.webhook, site.existing?.let { Webhooks.config(it.id) }, linkHasSip = config.sip != null)
+        return ImportPlan(sip, devices, webhook, site)
     }
 
     /** Applies the parts of [config] that [selection] keeps (the import screen). */
@@ -379,6 +389,12 @@ object AdonisProvisioner {
     ) {
         GlobalScope.launch(Dispatchers.Main) {
             try {
+                // Doors already on the phone join the upgraded site first (if still pending), so the mapping below wins.
+                org.linhome.sites.Sites.onDoorsRead(DeviceStore.devices.map { it.address }, settled = true)
+                // Which site this link is for: a new one, or a known one whose connection alone it replaces.
+                val linkSite = Webhooks.resolveLink(config.siteId, config.webhook, linkHasSip = config.sip != null)
+                var siteId: String? = null
+
                 // SIP account Configuration (always overwrites existing account once approved)
                 var sipConfigured = false
                 config.sip?.takeIf { selection == null || selection.sip }?.let { sip ->
@@ -417,7 +433,8 @@ object AdonisProvisioner {
 
                     val account = accountCreator.createAccountInCore()
                     if (account != null) {
-                        val callsEnabled = corePreferences.appEnabled
+                        // Registered only while the phone takes calls (main switch and some site on).
+                        val callsEnabled = org.linhome.sites.Sites.receivingCalls()
                         account.params.clone().also { newParams ->
                             newParams.isRegisterEnabled = callsEnabled
                             newParams.expires = if (callsEnabled) sip.expires else 0
@@ -448,10 +465,10 @@ object AdonisProvisioner {
                             LinhomeAccount.linkProxiesWithPushAccount(androidx.lifecycle.MutableLiveData())
                         }
                         Log.i("$TAG SIP account created successfully and registration refreshed")
-                        // The webhooks belong to the SIP account: a link with an account replaces them
-                        // (or clears them when it has none); a devices-only link leaves them alone.
+                        // A link with an account replaces its site's webhooks (or clears them when it has none);
+                        // a devices-only link leaves them alone. Other sites keep theirs.
                         // On the import screen they are their own choice (below).
-                        if (selection == null) Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
+                        if (selection == null) siteId = Webhooks.applyLink(linkSite, config.webhook, applyWebhook = true, siteName = config.siteName)?.id
                     } else {
                         Log.e("$TAG Failed to create account in core using AccountCreator")
                     }
@@ -459,7 +476,12 @@ object AdonisProvisioner {
 
                 // The import screen's webhook choice (a link with a SIP account carries them, or their absence).
                 if (selection != null && selection.webhook && config.sip != null) {
-                    Webhooks.onLinkApplied(config.webhook, corePreferences.appEnabled)
+                    siteId = Webhooks.applyLink(linkSite, config.webhook, applyWebhook = true, siteName = config.siteName)?.id
+                }
+                // Webhooks not taken: the site is still recorded (a link with an account), or re-keyed and renamed
+                // (a known site); a devices-only link for a site this phone doesn't know adds none.
+                if (siteId == null && (config.sip != null || linkSite.existing != null)) {
+                    siteId = Webhooks.applyLink(linkSite, null, applyWebhook = false, siteName = config.siteName)?.id
                 }
 
                 // Device(s) Configuration (additive by default; overwrites only if explicitly approved)
@@ -473,9 +495,12 @@ object AdonisProvisioner {
 
                     if (existingDevice != null && !overwriteExistingDevices) {
                         Log.i("$TAG Skipping existing device '${dev.name}' ($formattedAddress) because overwrite was not approved")
+                        if (siteId != null) Webhooks.mapDoor(existingDevice.address, siteId)
                         devicesSkippedCount++
                         continue
                     }
+                    // The door's site: the link's, else (no site in the link) the one it already had.
+                    val doorSiteId = siteId ?: existingDevice?.let { Webhooks.siteForDoor(it.address)?.id }
 
                     val mappedType = mapDeviceType(dev.type)
                     val mappedMethod = mapMethod(dev.method)
@@ -502,7 +527,13 @@ object AdonisProvisioner {
                         formattedAltAddress
                     )
                     DeviceStore.persistDevice(newDevice)
+                    if (existingDevice != null && org.linhome.sites.SiteRegistry.doorKey(existingDevice.address) != org.linhome.sites.SiteRegistry.doorKey(formattedAddress)) {
+                        Webhooks.mapDoor(existingDevice.address, null)
+                    }
+                    if (doorSiteId != null) Webhooks.mapDoor(formattedAddress, doorSiteId)
                 }
+                // A new site (switch on) may be the first one taking calls again: register if so.
+                if (siteId != null || sipConfigured) org.linhome.entities.LinhomeAccount.applyRegistration()
 
                 val totalChangedDevices = devicesAddedCount + devicesUpdatedCount
                 if (totalChangedDevices > 0) {

@@ -39,7 +39,7 @@ class BootReceiver : BroadcastReceiver() {
             )
             context.stopService(serviceIntent)
         } else if (intent.action.equals(Intent.ACTION_BOOT_COMPLETED, ignoreCase = true)) {
-            val autoStart = corePreferences.autoStart && corePreferences.appEnabled
+            val autoStart = corePreferences.autoStart && org.linhome.sites.Sites.receivingCalls()
             Log.i("[Boot Receiver] Device is starting, autoStart is $autoStart")
             if (autoStart) {
                 serviceIntent.putExtra("StartForeground", true)

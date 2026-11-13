@@ -187,7 +187,8 @@ class LoginSipAccountViewModel :
         val server = Factory.instance().createAddress("sip:$dom") ?: return EditResult.INVALID
         server.transport = transportType
 
-        val callsEnabled = corePreferences.appEnabled
+        // Registered only while the phone takes calls (main switch and some site on).
+        val callsEnabled = org.linhome.sites.Sites.receivingCalls()
         val params = account.params.clone()
         params.identityAddress = identity
         params.serverAddress = server

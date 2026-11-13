@@ -57,11 +57,14 @@ enum class CallOutcome(val wireName: String) {
  * with every step when the call is over. Which of them leave the phone is the site's choice
  * ([send] drops what it didn't list); this class always narrates.
  *
+ * Each call carries the site of the door that called ([onIncoming]'s `site`): [send] gets it with every event, so
+ * the events reach that site only (null: a phone number, an unknown caller, a door with no site; they go nowhere).
+ *
  * Plain Kotlin: the app feeds it from Linphone's call states (CoreContext), tests feed it directly.
  * Every method must be called from the same thread.
  */
 class CallReporter(
-    private val send: (event: String, fields: JSONObject, at: String) -> Unit,
+    private val send: (site: String?, event: String, fields: JSONObject, at: String) -> Unit,
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val zone: ZoneId = ZoneId.systemDefault()
 ) {
@@ -72,7 +75,8 @@ class CallReporter(
         val door: String?,
         val from: String?,
         val startedMs: Long,
-        val gsmCallActive: Boolean
+        val gsmCallActive: Boolean,
+        val site: String?
     ) {
         val steps = mutableListOf<Step>()
         var refused: CallOutcome? = null
@@ -96,19 +100,26 @@ class CallReporter(
         record.steps += Step(at - record.startedMs, what, extra)
         val fields = base(record)
         extra?.keys()?.forEach { fields.put(it, extra.get(it)) }
-        send(event, fields, iso(at))
+        send(record.site, event, fields, iso(at))
     }
+
+    /** The site [callId]'s events go to (its door's), or null. */
+    fun siteOf(callId: String?): String? = callId?.let { records[it]?.site }
 
     /** Whether [callId] is being narrated (an incoming call seen by [onIncoming]). */
     fun isTracking(callId: String): Boolean = records.containsKey(callId)
 
     /**
      * An incoming call reached the phone. [refused] is set when the app declines it without alerting
-     * ([CallOutcome.REFUSED_PAUSED] or [CallOutcome.REFUSED_BUSY]); otherwise it rings.
+     * ([CallOutcome.REFUSED_PAUSED] or [CallOutcome.REFUSED_BUSY]); otherwise it rings. [site] is the calling
+     * door's site, the only one that hears about the call.
      */
-    fun onIncoming(callId: String, door: String?, from: String?, refused: CallOutcome? = null, gsmCallActive: Boolean = false) {
+    fun onIncoming(
+        callId: String, door: String?, from: String?, refused: CallOutcome? = null, gsmCallActive: Boolean = false,
+        site: String? = null
+    ) {
         if (records.containsKey(callId)) return
-        val record = Record(callId, door, from, nowMs(), gsmCallActive)
+        val record = Record(callId, door, from, nowMs(), gsmCallActive, site)
         records[callId] = record
         record.refused = refused
         val extra = JSONObject()
@@ -131,9 +142,10 @@ class CallReporter(
 
     /**
      * An action button: [action] its type, [code] the DTMF, [early] true before the call was answered.
-     * Reported whatever the door does with the DTMF: the site may act on it itself (turn on a light).
+     * Reported whatever the door does with the DTMF: the site may act on it itself (turn on a light). [site] is
+     * used for a call that isn't narrated (otherwise the call's own site).
      */
-    fun onDoorAction(callId: String?, action: String?, code: String?, early: Boolean, sent: Boolean) {
+    fun onDoorAction(callId: String?, action: String?, code: String?, early: Boolean, sent: Boolean, site: String? = null) {
         val extra = JSONObject()
             .put("action", action ?: JSONObject.NULL)
             .put("code", code ?: JSONObject.NULL)
@@ -143,7 +155,7 @@ class CallReporter(
         if (record == null) {
             val fields = JSONObject().put("call_id", callId ?: JSONObject.NULL)
             extra.keys().forEach { fields.put(it, extra.get(it)) }
-            send(WebhookEvents.DOOR_ACTION, fields, iso(nowMs()))
+            send(site, WebhookEvents.DOOR_ACTION, fields, iso(nowMs()))
             return
         }
         step(record, "door_action", WebhookEvents.DOOR_ACTION, extra)
@@ -195,7 +207,7 @@ class CallReporter(
             steps.put(json)
         }
         summary.put("steps", steps)
-        send(WebhookEvents.CALL_SUMMARY, summary, iso(endedMs))
+        send(record.site, WebhookEvents.CALL_SUMMARY, summary, iso(endedMs))
     }
 }
 

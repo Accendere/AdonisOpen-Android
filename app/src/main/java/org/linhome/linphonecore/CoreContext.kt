@@ -122,9 +122,10 @@ class CoreContext(
     val silentAcceptRemainingMs = MutableLiveData<Long>(0L)
     val lastCallStateMessage = HashMap<String, String>()
 
-    /** Narrates incoming calls as webhook events (only what the site listed leaves the phone). */
-    val callReporter = org.linhome.webhooks.CallReporter({ event, fields, at -> org.linhome.webhooks.Webhooks.sendEvent(event, fields, at) })
-    private val registrationReporter = org.linhome.webhooks.RegistrationReporter({ event, fields, at -> org.linhome.webhooks.Webhooks.sendEvent(event, fields, at) })
+    /** Narrates incoming calls as webhook events, to the calling door's site only (only what it listed leaves the phone). */
+    val callReporter = org.linhome.webhooks.CallReporter({ site, event, fields, at -> org.linhome.webhooks.Webhooks.sendCallEvent(site, event, fields, at) })
+    /** The registration is the phone's, not a site's: every site hears it. */
+    private val registrationReporter = org.linhome.webhooks.RegistrationReporter({ event, fields, at -> org.linhome.webhooks.Webhooks.sendToAll(event, fields, at) })
 
     /** Calls this phone hung up or declined itself, so `call_ended` can say `by: local`. */
     private val localHangups = HashSet<String>()
@@ -140,11 +141,17 @@ class CoreContext(
     fun doorNameFor(call: Call): String? =
         DeviceStore.findDeviceByAddress(call.remoteAddress)?.name ?: call.remoteAddress?.username
 
+    /** The site of the door calling in [call] (its configured device's address), or null: a phone number, an unknown caller, a door added by hand. */
+    fun siteIdFor(call: Call): String? {
+        val device = DeviceStore.findDeviceByAddress(call.remoteAddress) ?: return null
+        return org.linhome.webhooks.Webhooks.siteForDoor(device.address)?.id
+    }
+
     /** Reports an action button press (before or during the call). */
     fun reportDoorAction(call: Call, action: Action) {
         callReporter.onDoorAction(
             call.callLog?.callId, action.type, action.code,
-            early = isCallSilentlyAccepted(call), sent = action.code != null
+            early = isCallSilentlyAccepted(call), sent = action.code != null, site = siteIdFor(call)
         )
     }
 
@@ -174,11 +181,12 @@ class CoreContext(
             org.linhome.webhooks.CallOutcome.DECLINED_ELSEWHERE -> false
             else -> null
         }
+        val site = callReporter.siteOf(id)
         if (outcome == org.linhome.webhooks.CallOutcome.ANSWERED_ELSEWHERE &&
-            org.linhome.webhooks.Webhooks.config?.reportsCalls == true
+            org.linhome.webhooks.Webhooks.reportsCalls(site)
         ) {
             val door = doorNameFor(call)
-            val lookup = coroutineScope.async { org.linhome.webhooks.Webhooks.whoAnswered(id, door) }
+            val lookup = coroutineScope.async { org.linhome.webhooks.Webhooks.whoAnswered(site, id, door) }
             answeredByLookups[id] = lookup
             coroutineScope.launch {
                 val name = runCatching { lookup.await() }.getOrNull()
@@ -406,20 +414,31 @@ class CoreContext(
             }
             if (state == Call.State.IncomingReceived) {
                 val callId = call.callLog?.callId
-                if (!corePreferences.appEnabled) {
-                    Log.i("[Context] App is disabled by user preference, declining incoming call")
-                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED) }
+                val doorSite = DeviceStore.findDeviceByAddress(call.remoteAddress)?.let { org.linhome.webhooks.Webhooks.siteForDoor(it.address) }
+                val siteId = doorSite?.id
+                val decision = org.linhome.sites.Sites.registry.decideIncoming(corePreferences.appEnabled, doorSite)
+                if (decision == org.linhome.sites.IncomingDecision.REFUSE_PAUSED) {
+                    Log.i("[Context] Calls are paused (main switch, or every site), declining incoming call")
+                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED, site = siteId) }
                     call.decline(Reason.TemporarilyUnavailable)
+                    return
+                }
+                if (decision == org.linhome.sites.IncomingDecision.REFUSE_SITE_PAUSED) {
+                    // The phone stays registered for the other sites: this site's door calls are refused here, before
+                    // ringing, as busy (486), and the site hears call_ringing refused "paused" + call_summary.
+                    Log.i("[Context] Calls are paused at site $siteId, declining its door's incoming call")
+                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED, site = siteId) }
+                    call.decline(Reason.Busy)
                     return
                 }
 
                 if (core.callsNb > 1) {
-                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_BUSY) }
+                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_BUSY, site = siteId) }
                     call.decline(Reason.Busy)
                     return
                     }
 
-                callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), gsmCallActive = gsmCallActive()) }
+                callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), gsmCallActive = gsmCallActive(), site = siteId) }
 
                 if (gsmCallActive()) {
                     Log.w("[Context] Receiving a Linhome call while a GSM call is active")
@@ -517,7 +536,7 @@ class CoreContext(
                     // End/Error, not Released: Released only comes once the Call object is freed, which can be much later.
                     if (state != Call.State.Released) {
                         // Back from the call types to special use (no call = no microphone or camera type).
-                        if (corePreferences.keepServiceAlive && corePreferences.appEnabled && notificationsManager.service != null &&
+                        if (corePreferences.keepServiceAlive && org.linhome.sites.Sites.receivingCalls() && notificationsManager.service != null &&
                             Compatibility.hasPermission(context, POST_NOTIFICATIONS)) {
                             notificationsManager.startForeground()
                         }
@@ -563,7 +582,7 @@ class CoreContext(
 
         initPhoneStateListener()
 
-        if (corePreferences.keepServiceAlive && corePreferences.appEnabled && Compatibility.hasPermission(context,
+        if (corePreferences.keepServiceAlive && org.linhome.sites.Sites.receivingCalls() && Compatibility.hasPermission(context,
                 POST_NOTIFICATIONS)) {
             org.linphone.core.tools.Log.i("[Context] Background mode setting is enabled, starting Service")
             notificationsManager.startForeground()
@@ -736,7 +755,7 @@ class CoreContext(
         for (delayMs in KEEP_ALIVE_CHECK_DELAYS_MS) {
             coroutineScope.launch {
                 delay(delayMs)
-                if (!corePreferences.keepServiceAlive || !corePreferences.appEnabled || core.callsNb > 0) {
+                if (!corePreferences.keepServiceAlive || !org.linhome.sites.Sites.receivingCalls() || core.callsNb > 0) {
                     return@launch
                 }
                 val service = notificationsManager.service

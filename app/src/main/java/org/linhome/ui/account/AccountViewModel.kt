@@ -77,7 +77,7 @@ class AccountViewModel : ViewModel() {
         }
         val address = current.params?.identityAddress
         identity.value = listOfNotNull(address?.username, address?.domain).joinToString("@")
-        val status = if (!LinhomeApplication.corePreferences.appEnabled) {
+        val status = if (!org.linhome.sites.Sites.receivingCalls()) {
             Texts.get("registration_state_paused")
         } else {
             current.state?.toHumanReadable()

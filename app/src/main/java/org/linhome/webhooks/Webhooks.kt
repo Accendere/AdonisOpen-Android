@@ -32,6 +32,13 @@ import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
 import org.json.JSONObject
 import org.linhome.BuildConfig
+import org.linhome.LinhomeApplication
+import org.linhome.entities.LinhomeAccount
+import org.linhome.sites.LinkSite
+import org.linhome.sites.Site
+import org.linhome.sites.SiteRegistry
+import org.linhome.sites.Sites
+import org.linhome.store.DeviceStore
 import org.linphone.core.tools.Log
 import java.util.UUID
 
@@ -39,10 +46,20 @@ import java.util.UUID
  * Webhook settings in the app's private storage (the same protection as the SIP password,
  * which lives in the app's private Linphone config). Kept out of that config file on purpose:
  * its content is dumped into debug logs, and the token must never reach a log.
+ *
+ * One file per site ([prefsName], see [org.linhome.sites.Sites.storageName]); the device id is the phone's, for every
+ * site, and stays in the single-site app's file `adonis_webhooks`.
  */
-class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
+class SharedPreferencesWebhookStorage(context: Context, prefsName: String = DEVICE_PREFS) : WebhookStorage {
+    companion object {
+        const val DEVICE_PREFS = "adonis_webhooks"
+        const val KEY_DEVICE_ID = "device_id"
+    }
+
     private val prefs: SharedPreferences =
-        context.getSharedPreferences("adonis_webhooks", Context.MODE_PRIVATE)
+        context.getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+    private val devicePrefs: SharedPreferences =
+        context.getSharedPreferences(DEVICE_PREFS, Context.MODE_PRIVATE)
 
     override var config: WebhookConfig?
         get() {
@@ -118,8 +135,8 @@ class SharedPreferencesWebhookStorage(context: Context) : WebhookStorage {
      * phones says so. An install that already has an id keeps it, so updating the app doesn't either.
      */
     override val deviceId: String
-        get() = prefs.getString("device_id", null) ?: stableDeviceId(appContext).also {
-            prefs.edit().putString("device_id", it).apply()
+        get() = devicePrefs.getString(KEY_DEVICE_ID, null) ?: stableDeviceId(appContext).also {
+            devicePrefs.edit().putString(KEY_DEVICE_ID, it).apply()
         }
 }
 
@@ -133,36 +150,52 @@ internal fun stableDeviceId(context: Context): String {
     return UUID.nameUUIDFromBytes("adonis-open-device:$androidId".toByteArray(Charsets.UTF_8)).toString()
 }
 
-/** The app's single [WebhookEngine], wired to Android: network changes, foreground, logs. */
+/**
+ * The app's webhooks: one [WebhookEngine] per site ([SiteWebhooks]), wired to Android: network changes, foreground,
+ * logs. Also the API the screens use for sites (list, switch, remove).
+ */
 object Webhooks {
-    private var engine: WebhookEngine? = null
+    private var hub: SiteWebhooks? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var startedActivities = 0
 
-    /** Current status, for the "scan your link again" banner. */
+    /** The worst status of all sites, for the "scan your link again" banner. */
     val status = MutableLiveData(WebhookStatus.ACTIVE)
 
-    fun init(application: Application, callsEnabled: Boolean) {
-        if (engine != null) return
-        val storage = SharedPreferencesWebhookStorage(application)
-        val created = WebhookEngine(
-            storage = storage,
-            transport = HttpUrlConnectionTransport(),
-            mainDispatcher = Dispatchers.Main,
-            ioDispatcher = Dispatchers.IO,
-            logger = { level, message ->
-                when (level) {
-                    WebhookLog.Level.INFO -> Log.i(message)
-                    WebhookLog.Level.WARNING -> Log.w(message)
-                    WebhookLog.Level.ERROR -> Log.e(message)
-                }
+    /** The sites, after every change (added, re-keyed, renamed, switched, removed): for Settings and the account card. */
+    val sites = MutableLiveData<List<Site>>(emptyList())
+
+    private val logger = WebhookLog { level, message ->
+        when (level) {
+            WebhookLog.Level.INFO -> Log.i(message)
+            WebhookLog.Level.WARNING -> Log.w(message)
+            WebhookLog.Level.ERROR -> Log.e(message)
+        }
+    }
+
+    fun init(application: Application) {
+        if (hub != null) return
+        val created = SiteWebhooks(
+            registry = Sites.registry,
+            mainEnabled = { LinhomeApplication.corePreferences.appEnabled },
+            newEngine = { site ->
+                val storage = Sites.storage(application, site.slot)
+                WebhookEngine(
+                    storage = storage,
+                    transport = HttpUrlConnectionTransport(),
+                    mainDispatcher = Dispatchers.Main,
+                    ioDispatcher = Dispatchers.IO,
+                    logger = logger,
+                    onStatusChanged = { mainHandler.post { refresh() } },
+                    // A poll's messages concern the site that answered it: its claim must be on that site's host.
+                    onPollMessages = { messages -> PollMessages.handle(application, messages, storage.config?.host) },
+                    appVersion = BuildConfig.VERSION_NAME
+                )
             },
-            onStatusChanged = { status.postValue(it) },
-            onPollMessages = { messages -> PollMessages.handle(application, messages) },
-            appVersion = BuildConfig.VERSION_NAME
+            forgetStorage = { Sites.forgetStorage(application, it.slot) },
+            logger = logger
         )
-        engine = created
-        status.value = storage.status
+        hub = created
 
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
@@ -193,34 +226,109 @@ object Webhooks {
             Log.w("[Webhooks] Can't watch the network: ${e.javaClass.simpleName}")
         }
 
-        created.onAppStart(callsEnabled)
+        created.start()
+        refresh()
     }
 
-    /** This phone's id (made once, kept for good), also sent with claim links. */
+    private fun refresh() {
+        val current = hub ?: return
+        status.value = current.overallStatus()
+        sites.value = current.registry.sites()
+    }
+
+    /** This phone's id (made once, kept for good, the same for every site), also sent with claim links. */
     fun deviceId(context: Context): String = SharedPreferencesWebhookStorage(context.applicationContext).deviceId
 
-    fun onSwitchChanged(enabled: Boolean) = onMain { it.onSwitchChanged(enabled) }
+    /** The phone's main receive-calls switch changed (already stored): every site hears its resulting state. */
+    fun onMainSwitchChanged() = onMain { it.onMainSwitchChanged() }
 
-    /** The settings in use (for the import screen's comparison), or null. */
-    val config: WebhookConfig? get() = engine?.config
+    /** The sites this phone takes calls for. */
+    fun siteList(): List<Site> = Sites.registry.sites()
 
-    /** Queues [event] if the site asked for it (see [WebhookEngine.sendEvent]). Any thread. */
-    fun sendEvent(event: String, fields: JSONObject, at: String? = null) = onMain { it.sendEvent(event, fields, at) }
+    /** The site [address]'s door belongs to; null for a door added by hand, a phone number, an unknown caller. */
+    fun siteForDoor(address: String?): Site? = Sites.registry.siteForDoor(address)
 
-    /** Whether the site wants [event]; false when nothing is configured. */
-    fun sends(event: String): Boolean = engine?.config?.sends(event) == true
+    /** [siteId]'s connection (for Settings and the import screen's comparison), or null. */
+    fun config(siteId: String?): WebhookConfig? = hub?.config(siteId)
 
-    /** See [WebhookEngine.whoAnswered]. */
-    suspend fun whoAnswered(callId: String?, door: String?): String? = engine?.whoAnswered(callId, door)
+    fun status(siteId: String?): WebhookStatus = hub?.status(siteId) ?: WebhookStatus.ACTIVE
 
-    fun onLinkApplied(config: WebhookConfig?, callsEnabled: Boolean) = onMain { it.onLinkApplied(config, callsEnabled) }
+    /** Queues a call's [event] for [siteId] (the calling door's site) if it asked for it; null goes nowhere. Any thread. */
+    fun sendCallEvent(siteId: String?, event: String, fields: JSONObject, at: String? = null) {
+        if (siteId == null) return
+        onMain { it.sendCallEvent(siteId, event, fields, at) }
+    }
 
-    /** See [WebhookEngine.applyLocalEdit]; null when webhooks aren't set up. Call from the main thread. */
-    fun applyLocalEdit(events: Set<String>, baseUrl: String, callsEnabled: Boolean): WebhookEngine.LocalEdit? =
-        engine?.applyLocalEdit(events, baseUrl, callsEnabled)
+    /** Queues an event about the phone itself (`registration`) for every site that asked for it. Any thread. */
+    fun sendToAll(event: String, fields: JSONObject, at: String? = null) = onMain { it.sendToAll(event, fields, at) }
 
-    private fun onMain(action: (WebhookEngine) -> Unit) {
-        val current = engine ?: return
+    /** Whether [siteId] wants [event]; false for no site or nothing configured. */
+    fun sends(siteId: String?, event: String): Boolean = hub?.sends(siteId, event) == true
+
+    /** Whether [siteId] wants any call event (also gates `who_answered`). */
+    fun reportsCalls(siteId: String?): Boolean = config(siteId)?.reportsCalls == true
+
+    /** See [WebhookEngine.whoAnswered]; asked of [siteId] only. */
+    suspend fun whoAnswered(siteId: String?, callId: String?, door: String?): String? = hub?.whoAnswered(siteId, callId, door)
+
+    /** Which site a link is for (see [org.linhome.sites.SiteRegistry.resolveLink]). */
+    fun resolveLink(siteId: String?, webhook: WebhookConfig?, linkHasSip: Boolean): LinkSite =
+        hub?.resolveLink(siteId, webhook, linkHasSip)
+            ?: Sites.registry.resolveLink(siteId, webhook?.baseUrl, linkHasSip) { null }
+
+    /** See [SiteWebhooks.applyLink]. Main thread. */
+    fun applyLink(target: LinkSite, webhook: WebhookConfig?, applyWebhook: Boolean, siteName: String?): Site? {
+        val current = hub ?: return null
+        val site = current.applyLink(target, webhook, applyWebhook, siteName)
+        refresh()
+        return site
+    }
+
+    /**
+     * [address]'s door belongs to [siteId] from now on (null: to no site). When it belonged to another site, the
+     * last link wins, logged.
+     */
+    fun mapDoor(address: String?, siteId: String?) {
+        val before = Sites.registry.mapDoor(address, siteId)
+        if (before != null && before.id != siteId) {
+            Log.w("[Webhooks] Door ${SiteRegistry.doorKey(address)} moves from site ${before.id} to ${siteId ?: "no site"}")
+        }
+    }
+
+    /** See [WebhookEngine.applyLocalEdit], for [siteId]; null when it has no connection. Main thread. */
+    fun applyLocalEdit(siteId: String, events: Set<String>, baseUrl: String): WebhookEngine.LocalEdit? {
+        val result = hub?.applyLocalEdit(siteId, events, baseUrl)
+        refresh()
+        return result
+    }
+
+    /**
+     * Turns [siteId]'s own receive-calls switch: the site hears `enabled` = main AND this, its door calls are refused
+     * while off, and SIP unregisters when no site takes calls any more. Main thread.
+     */
+    fun setSiteCallsEnabled(siteId: String, enabled: Boolean) {
+        val current = hub ?: return
+        if (!current.setSiteCallsEnabled(siteId, enabled)) return
+        refresh()
+        LinhomeAccount.applyRegistration()
+    }
+
+    /**
+     * Forgets [siteId]: its connection, its queued events and its door mappings; with [removeDoors], its doors leave
+     * the phone too. The SIP account stays. Main thread.
+     */
+    fun removeSite(siteId: String, removeDoors: Boolean) {
+        val current = hub ?: return
+        val keys = current.removeSite(siteId) ?: return
+        if (removeDoors && keys.isNotEmpty()) {
+            DeviceStore.devices.filter { SiteRegistry.doorKey(it.address) in keys }.forEach { DeviceStore.removeDevice(it) }
+        }
+        refresh()
+        LinhomeAccount.applyRegistration()
+    }
+
+    private fun onMain(action: (SiteWebhooks) -> Unit) {
+        val current = hub ?: return
         if (Looper.myLooper() == Looper.getMainLooper()) action(current) else mainHandler.post { action(current) }
     }
 }

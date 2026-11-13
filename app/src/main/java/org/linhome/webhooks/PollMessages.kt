@@ -79,8 +79,8 @@ object PollMessages {
     private const val NOTIFICATION_ID = 7341
     private const val PREFS = "adonis_poll_messages"
 
-    fun handle(context: Context, messages: List<JSONObject>) {
-        val host = Webhooks.config?.host
+    /** [host] is the webhook host of the site whose poll brought [messages]. */
+    fun handle(context: Context, messages: List<JSONObject>, host: String?) {
         messages.forEach { json ->
             when (val message = PollMessage.parse(json, host)) {
                 is PollMessage.ConfigUpdate -> {

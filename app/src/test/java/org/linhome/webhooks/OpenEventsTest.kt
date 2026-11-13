@@ -281,7 +281,7 @@ class OpenEventsTest {
     private class Clock(var ms: Long = 1_762_603_200_000L)
 
     private fun reporter(clock: Clock, sent: MutableList<Pair<String, JSONObject>>) =
-        CallReporter({ e, f, _ -> sent += e to f }, nowMs = { clock.ms }, zone = ZoneOffset.UTC)
+        CallReporter({ _, e, f, _ -> sent += e to f }, nowMs = { clock.ms }, zone = ZoneOffset.UTC)
 
     @Test
     fun answeredCallNarratesEveryStepAndASummary() {

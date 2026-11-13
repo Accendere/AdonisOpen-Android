@@ -144,8 +144,10 @@ class SettingsFragment : GenericFragment() {
             setTextColor(Theme.getColor(colorKey))
             setPadding(pad, pad / 2, pad, pad / 2)
         }
-        val config = org.linhome.webhooks.Webhooks.config
-        if (config == null) {
+        // One card for the first site with webhooks (with one site: "the" site), until each site gets its own card.
+        val site = org.linhome.webhooks.Webhooks.siteList().firstOrNull { org.linhome.webhooks.Webhooks.config(it.id) != null }
+        val config = site?.let { org.linhome.webhooks.Webhooks.config(it.id) }
+        if (site == null || config == null) {
             body.addView(text(Texts.get("settings_webhooks_none")))
             return
         }
@@ -222,7 +224,7 @@ class SettingsFragment : GenericFragment() {
                 return@setOnClickListener
             }
             fun apply() {
-                val result = org.linhome.webhooks.Webhooks.applyLocalEdit(chosen.toSet(), normalized, LinhomeApplication.corePreferences.appEnabled)
+                val result = org.linhome.webhooks.Webhooks.applyLocalEdit(site.id, chosen.toSet(), normalized)
                 when (result) {
                     org.linhome.webhooks.WebhookEngine.LocalEdit.SAVED -> DialogUtil.toast("settings_webhooks_saved")
                     org.linhome.webhooks.WebhookEngine.LocalEdit.SAVED_KEY_REMOVED -> DialogUtil.toast("settings_webhooks_saved_elsewhere", long = true)

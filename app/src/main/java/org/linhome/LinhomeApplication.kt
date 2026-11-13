@@ -122,7 +122,7 @@ class LinhomeApplication : Application() {
         Customisation
         Texts
         ensureCoreExists(applicationContext)
-        Webhooks.init(this, corePreferences.appEnabled)
+        Webhooks.init(this)
         Compatibility.setupAppStartupListener(applicationContext)
         DeviceStore
     }

@@ -29,7 +29,7 @@ import org.linphone.mediastream.Log
 
 class CorePushReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (LinhomeApplication.contextExists() && !LinhomeApplication.corePreferences.appEnabled) {
+        if (LinhomeApplication.contextExists() && !org.linhome.sites.Sites.receivingCalls()) {
             Log.i("[Push Receiver] App is disabled, ignoring push notification")
             return
         }

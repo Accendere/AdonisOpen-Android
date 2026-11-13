@@ -111,12 +111,23 @@ object LinhomeAccount {
         }
     }
 
+    /** The phone's main receive-calls switch. */
     fun setAppEnabled(enabled: Boolean) {
         corePreferences.appEnabled = enabled
         appEnabledLiveData.postValue(enabled)
-        Webhooks.onSwitchChanged(enabled)
+        Webhooks.onMainSwitchChanged()
+        applyRegistration()
+    }
+
+    /**
+     * Registers SIP when the phone takes calls (main switch on and some site on, see Sites.receivingCalls), else
+     * unregisters: a phone paused at every site doesn't ring at all, like one paused with the main switch.
+     */
+    fun applyRegistration() {
+        val enabled = org.linhome.sites.Sites.receivingCalls()
         val defaultExpires = corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
         coreContext.core.accountList.forEach { account ->
+            if (account.params.isRegisterEnabled == enabled && (account.params.expires == 0) == !enabled) return@forEach
             account.params.clone().also { newParams ->
                 newParams.isRegisterEnabled = enabled
                 newParams.expires = if (enabled) defaultExpires else 0

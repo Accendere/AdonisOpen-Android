@@ -18,6 +18,7 @@
  */
 package org.linhome.utils
 
+import org.linhome.sites.LinkSite
 import org.linhome.webhooks.WebhookConfig
 
 /** What the phone has now, as far as an import is concerned (read from Linphone and the device store). */
@@ -77,7 +78,13 @@ data class WebhookImport(
 class ImportPlan(
     val sip: SipImport?,
     val devices: List<DeviceImport>,
-    val webhook: WebhookImport?
+    /** Compared with the link's own site's connection (none for a new site), never another site's. */
+    val webhook: WebhookImport?,
+    /**
+     * Which site the link is for ([LinkSite.isNew], or [LinkSite.existing] whose connection it replaces); null when
+     * not resolved (tests). [LinkSite.key] null: the link names no site.
+     */
+    val site: LinkSite? = null
 ) {
     /** What is selected by default: everything that changes something, nothing that is unchanged. */
     fun defaultSelection() = ImportSelection(

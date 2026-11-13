@@ -188,6 +188,8 @@ object DeviceStore {
         }
         devices.sortWith(compareBy({ it.name }, { it.address }))
         mutableDevices?.value = devices
+        // After the update to sites: the doors already on the phone join the upgraded site (once).
+        org.linhome.sites.Sites.onDoorsRead(devices.map { it.address }, settled = false)
     }
 
     fun readFromXml(): ArrayList<Device> {
@@ -242,6 +244,8 @@ object DeviceStore {
     }
 
     fun persistDevice(device: Device) {
+        // The list is loaded by now: settle the upgrade's doors before this one, which isn't one of them.
+        org.linhome.sites.Sites.onDoorsRead(devices.map { it.address }, settled = true)
         devices.add(device)
         saveLocalDevices()
         mutableDevices?.postValue(devices)

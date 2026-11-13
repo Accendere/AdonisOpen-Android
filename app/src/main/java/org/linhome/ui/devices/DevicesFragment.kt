@@ -70,6 +70,7 @@ class DevicesFragment : GenericFragment() {
         }
         RegistrationMonitor.snapshot.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
         LinhomeAccount.appEnabledLiveData.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
+        org.linhome.webhooks.Webhooks.sites.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
 
         binding.deviceList.layoutManager =
             LinearLayoutManager(activity, RecyclerView.VERTICAL, false)

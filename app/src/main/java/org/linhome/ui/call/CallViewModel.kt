@@ -433,7 +433,7 @@ class CallViewModel(val call: Call) : ViewModel() {
     private fun executeSiteAction(action: Action) {
         val name = Texts.get(action.typeName() ?: "") ?: action.code ?: ""
         Compatibility.vibrateActionFeedback()
-        if (!org.linhome.webhooks.Webhooks.sends(org.linhome.webhooks.WebhookEvents.DOOR_ACTION)) {
+        if (!org.linhome.webhooks.Webhooks.sends(coreContext.siteIdFor(call), org.linhome.webhooks.WebhookEvents.DOOR_ACTION)) {
             Log.w("[CallViewModel] Site action ${action.code} pressed, but this phone sends no door_action webhook to the site")
             actionFeedbackState.value = ActionFeedbackState.IDLE
             DialogUtil.toast("action_site_unavailable", long = true, oneArg = name)

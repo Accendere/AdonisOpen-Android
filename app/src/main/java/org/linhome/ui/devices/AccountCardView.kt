@@ -90,7 +90,12 @@ class AccountCardView @JvmOverloads constructor(
             seenInProgressSinceMs = now
         }
         val progressSince = if (snapshot?.failing == true) null else (snapshot?.progressSinceMs ?: seenInProgressSinceMs)
-        val callsEnabled = LinhomeApplication.corePreferences.appEnabled
+        // Paused = the main switch off, or every site paused (then SIP is unregistered too).
+        val callsEnabled = org.linhome.sites.Sites.receivingCalls()
+        // Some sites paused while others take calls: "Paused at Alameda".
+        val pausedAt = org.linhome.sites.Sites.registry.pausedSites(LinhomeApplication.corePreferences.appEnabled)
+            .map { it.displayName }.takeIf { it.isNotEmpty() }
+            ?.let { Texts.get("account_paused_at_sites", it.joinToString(", ")) }
         val mode = AccountStatus.decide(
             configured = account != null,
             callsEnabled = callsEnabled,
@@ -103,11 +108,11 @@ class AccountCardView @JvmOverloads constructor(
         val domain = identity?.domain
         val title = AccountStatus.title(identity?.username, SiteInfo.name(context), domain)
         val reason = snapshot?.reason ?: account?.errorInfo?.phrase?.takeIf { it.isNotBlank() }
-        val key = listOf(mode.name, title, domain, reason, callsEnabled).joinToString("|")
+        val key = listOf(mode.name, title, domain, reason, callsEnabled, pausedAt).joinToString("|")
         if (mode != shownMode || key != shownKey) {
             shownMode = mode
             shownKey = key
-            draw(mode, title, domain, reason, paused = !callsEnabled)
+            draw(mode, title, domain, reason, paused = !callsEnabled, pausedAt = pausedAt)
         }
         AccountStatus.nextCheckInMs(mode, progressSince, now)?.let { delay ->
             handler.postDelayed({ refresh() }, delay + 50)
@@ -119,14 +124,14 @@ class AccountCardView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
-    private fun draw(mode: AccountCardMode, title: String, domain: String?, reason: String?, paused: Boolean) {
+    private fun draw(mode: AccountCardMode, title: String, domain: String?, reason: String?, paused: Boolean, pausedAt: String?) {
         removeAllViews()
         setOnClickListener(null)
         isClickable = false
         when (mode) {
             AccountCardMode.NOT_CONFIGURED -> drawSetup()
-            AccountCardMode.FAILED -> drawFailed(domain, reason, paused)
-            else -> drawCompact(mode, title)
+            AccountCardMode.FAILED -> drawFailed(domain, reason, if (paused) Texts.get("registration_state_paused") else pausedAt)
+            else -> drawCompact(mode, title, pausedAt)
         }
     }
 
@@ -157,8 +162,11 @@ class AccountCardView @JvmOverloads constructor(
         }
     }
 
-    /** One line: the dot, `pedro · Alameda`, a short status when there is one, the chevron. */
-    private fun drawCompact(mode: AccountCardMode, title: String) {
+    /**
+     * One line: the dot, `pedro · Alameda`, a short status when there is one, the chevron; under it, [pausedAt]
+     * ("Paused at Alameda") when some sites are paused while others take calls.
+     */
+    private fun drawCompact(mode: AccountCardMode, title: String, pausedAt: String?) {
         background = cardBackground(Theme.getColor("color_d"))
         setPadding(dp(14), dp(10), dp(10), dp(10))
         val row = LinearLayout(context).apply {
@@ -183,7 +191,13 @@ class AccountCardView @JvmOverloads constructor(
         status?.let { row.addView(text(it, 13f, "color_g"), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { marginStart = dp(8) }) }
         row.addView(chevron(), LayoutParams(dp(12), dp(12)).apply { marginStart = dp(10) })
         addView(row)
-        contentDescription = listOfNotNull(Texts.get("menu_account"), title, status ?: if (mode == AccountCardMode.CONNECTED) Texts.get("registration_state_ok") else null).joinToString(", ")
+        pausedAt?.let {
+            addView(text(it, 13f, "color_g"), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(4)
+                marginStart = dp(20)
+            })
+        }
+        contentDescription = listOfNotNull(Texts.get("menu_account"), title, status ?: if (mode == AccountCardMode.CONNECTED) Texts.get("registration_state_ok") else null, pausedAt).joinToString(", ")
         isClickable = true
         isFocusable = true
         setOnClickListener { actions?.openAccount() }
@@ -191,9 +205,10 @@ class AccountCardView @JvmOverloads constructor(
 
     /**
      * The red banner: "Can't connect to <domain>: <reason>", Retry, and the way to the Account screen. With calls
-     * paused, a "Calls paused" line under it: the pause is shown alongside the error, never instead of it.
+     * paused ([pausedText]: "Calls paused", or "Paused at Alameda"), a line under it: the pause is shown alongside
+     * the error, never instead of it.
      */
-    private fun drawFailed(domain: String?, reason: String?, paused: Boolean) {
+    private fun drawFailed(domain: String?, reason: String?, pausedText: String?) {
         val red = Theme.getColor("color_e")
         background = cardBackground(ColorUtils.setAlphaComponent(red, 0x1F), red)
         setPadding(dp(14), dp(12), dp(10), dp(10))
@@ -206,7 +221,6 @@ class AccountCardView @JvmOverloads constructor(
         row.addView(text(message, 14f, "color_b", bold = true), LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         row.addView(chevron(), LayoutParams(dp(12), dp(12)).apply { marginStart = dp(10) })
         addView(row)
-        val pausedText = if (paused) Texts.get("registration_state_paused") else null
         pausedText?.let {
             addView(text(it, 13f, "color_g"), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
                 topMargin = dp(4)
