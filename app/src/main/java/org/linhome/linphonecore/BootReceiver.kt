@@ -39,7 +39,7 @@ class BootReceiver : BroadcastReceiver() {
             )
             context.stopService(serviceIntent)
         } else if (intent.action.equals(Intent.ACTION_BOOT_COMPLETED, ignoreCase = true)) {
-            val autoStart = corePreferences.autoStart && org.linhome.sites.Sites.receivingCalls()
+            val autoStart = corePreferences.autoStart // paused or not: SIP stays registered, paused calls are declined
             Log.i("[Boot Receiver] Device is starting, autoStart is $autoStart")
             if (autoStart) {
                 serviceIntent.putExtra("StartForeground", true)

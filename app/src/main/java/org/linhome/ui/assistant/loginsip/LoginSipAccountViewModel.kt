@@ -187,8 +187,7 @@ class LoginSipAccountViewModel :
         val server = Factory.instance().createAddress("sip:$dom") ?: return EditResult.INVALID
         server.transport = transportType
 
-        // Registered only while the phone takes calls (main switch and some site on).
-        val callsEnabled = org.linhome.sites.Sites.receivingCalls()
+        // Always registered: a paused phone declines calls when they arrive (see LinhomeAccount.applyRegistration).
         val params = account.params.clone()
         params.identityAddress = identity
         params.serverAddress = server
@@ -201,9 +200,11 @@ class LoginSipAccountViewModel :
                 (if (transportType == TransportType.Tls) "sips:" else "sip:") + cleanProxy + ";transport=" + transportToString(transportType)
             )?.also { params.setRoutesAddresses(arrayOf(it)) }
         }
-        val wantedExpires = expiration.first.value?.toIntOrNull()?.takeIf { it > 0 } ?: params.expires
-        params.isRegisterEnabled = callsEnabled
-        params.expires = if (callsEnabled) wantedExpires else 0
+        // An account paused by an older version has expires 0: fall back to the default then.
+        val wantedExpires = expiration.first.value?.toIntOrNull()?.takeIf { it > 0 } ?: params.expires.takeIf { it > 0 }
+            ?: LinhomeApplication.corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
+        params.isRegisterEnabled = true
+        params.expires = wantedExpires
 
         if (typedPassword != null || identityChanged) {
             oldAuth?.let { core.removeAuthInfo(it) }
@@ -215,7 +216,7 @@ class LoginSipAccountViewModel :
             org.linhome.utils.SiteInfo.setName(LinhomeApplication.instance, null)
         }
         org.linhome.linphonecore.RegistrationMonitor.reset(org.linphone.core.RegistrationState.Progress)
-        if (callsEnabled) account.refreshRegister()
+        account.refreshRegister()
         Log.i("[Account] Saved the account in place (${transportToString(transportType)})")
         return EditResult.SAVED
     }

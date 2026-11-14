@@ -111,33 +111,33 @@ object LinhomeAccount {
         }
     }
 
-    /** The phone's main receive-calls switch. */
+    /** The phone's main receive-calls switch, changed on the phone: every site hears its resulting state. */
     fun setAppEnabled(enabled: Boolean) {
-        corePreferences.appEnabled = enabled
-        appEnabledLiveData.postValue(enabled)
+        storeAppEnabled(enabled)
         Webhooks.onMainSwitchChanged()
         applyRegistration()
     }
 
     /**
-     * Registers SIP when the phone takes calls (main switch on and some site on, see Sites.receivingCalls), else
-     * unregisters: a phone paused at every site doesn't ring at all, like one paused with the main switch.
+     * Stores the main switch and tells the screens, nothing else: for a site's `receive_calls`, whose own site hears
+     * the result with `cause: site` and whose other sites' state doesn't change (see SiteWebhooks.applyReceiveCalls).
+     */
+    fun storeAppEnabled(enabled: Boolean) {
+        corePreferences.appEnabled = enabled
+        appEnabledLiveData.postValue(enabled)
+    }
+
+    /**
+     * Keeps SIP registered, paused or not: a paused phone declines the call when it arrives (CoreContext, before any
+     * ringing), so a site that switches the phone back on reaches it with its very next call, not only after the
+     * phone's next poll. (Until 2.0.3 a phone paused everywhere unregistered.) The keep-alive service follows the
+     * Background mode setting alone, for the same reason: without it Android cuts a background app's network and the
+     * registration lapses. Its notification says it keeps the app running, not that calls ring, so it isn't wrong on
+     * a paused phone. Also refreshes the tile and the widget after a switch changed.
      */
     fun applyRegistration() {
-        val enabled = org.linhome.sites.Sites.receivingCalls()
-        val defaultExpires = corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
-        coreContext.core.accountList.forEach { account ->
-            if (account.params.isRegisterEnabled == enabled && (account.params.expires == 0) == !enabled) return@forEach
-            account.params.clone().also { newParams ->
-                newParams.isRegisterEnabled = enabled
-                newParams.expires = if (enabled) defaultExpires else 0
-                account.params = newParams
-            }
-            account.refreshRegister()
-        }
-        if (!enabled) {
-            coreContext.notificationsManager.stopForegroundNotification()
-        } else if (corePreferences.keepServiceAlive) {
+        registerAll(coreContext.core)
+        if (corePreferences.keepServiceAlive) {
             coreContext.notificationsManager.startForeground()
         }
         try {
@@ -150,6 +150,26 @@ object LinhomeAccount {
             }
         } catch (e: Exception) {
             Log.e("[LinhomeAccount] Error notifying widget/tile: ${e.message}")
+        }
+    }
+
+    /**
+     * Registers every account that isn't (an account paused by an older version has registration off and expires 0).
+     * Only with a SIP account: after a logout only the push gateway account is left, unregistered on purpose.
+     * Also at every start, so a phone updated while paused registers again.
+     */
+    fun registerAll(core: org.linphone.core.Core) {
+        if (core.accountList.none { it.params.idkey != PUSH_GW_ID_KEY }) return
+        val defaultExpires = corePreferences.config.getInt("proxy_default_values", "reg_expires", 31536000)
+        core.accountList.forEach { account ->
+            if (account.params.isRegisterEnabled && account.params.expires != 0) return@forEach
+            Log.i("[LinhomeAccount] Registering an account that was unregistered (paused phones stay registered now)")
+            account.params.clone().also { newParams ->
+                newParams.isRegisterEnabled = true
+                newParams.expires = defaultExpires
+                account.params = newParams
+            }
+            account.refreshRegister()
         }
     }
 

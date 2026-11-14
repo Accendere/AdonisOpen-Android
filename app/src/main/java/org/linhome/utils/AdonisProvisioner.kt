@@ -433,11 +433,10 @@ object AdonisProvisioner {
 
                     val account = accountCreator.createAccountInCore()
                     if (account != null) {
-                        // Registered only while the phone takes calls (main switch and some site on).
-                        val callsEnabled = org.linhome.sites.Sites.receivingCalls()
+                        // Always registered: a paused phone declines calls when they arrive (see LinhomeAccount.applyRegistration).
                         account.params.clone().also { newParams ->
-                            newParams.isRegisterEnabled = callsEnabled
-                            newParams.expires = if (callsEnabled) sip.expires else 0
+                            newParams.isRegisterEnabled = true
+                            newParams.expires = sip.expires
                             newParams.transport = transportType
                             newParams.pushNotificationAllowed = true
                             if (!sip.proxy.isNullOrBlank()) {
