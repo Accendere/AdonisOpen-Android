@@ -187,13 +187,17 @@ object Webhooks {
                     ioDispatcher = Dispatchers.IO,
                     logger = logger,
                     onStatusChanged = { mainHandler.post { refresh() } },
-                    // A poll's messages concern the site that answered it: its claim must be on that site's host.
-                    onPollMessages = { messages -> PollMessages.handle(application, messages, storage.config?.host) },
+                    // A poll's messages concern the site that answered it: its claim must be on that site's host, its
+                    // receive_calls switches that site (looked up by slot: the site may have been re-keyed since).
+                    onPollMessages = { messages ->
+                        PollMessages.handle(application, messages, storage.config?.host, Sites.registry.bySlot(site.slot)?.id)
+                    },
                     appVersion = BuildConfig.VERSION_NAME
                 )
             },
             forgetStorage = { Sites.forgetStorage(application, it.slot) },
-            logger = logger
+            logger = logger,
+            setMainEnabled = { LinhomeAccount.storeAppEnabled(it) }
         )
         hub = created
 
@@ -303,8 +307,8 @@ object Webhooks {
     }
 
     /**
-     * Turns [siteId]'s own receive-calls switch: the site hears `enabled` = main AND this, its door calls are refused
-     * while off, and SIP unregisters when no site takes calls any more. Main thread.
+     * Turns [siteId]'s own receive-calls switch: the site hears `enabled` = main AND this, and its door calls are
+     * refused while off (SIP stays registered). Main thread.
      */
     fun setSiteCallsEnabled(siteId: String, enabled: Boolean) {
         val current = hub ?: return
@@ -312,6 +316,25 @@ object Webhooks {
         refresh()
         LinhomeAccount.applyRegistration()
     }
+
+    /**
+     * [siteId] switched this phone's calls for it with `receive_calls` (see [SiteWebhooks.applyReceiveCalls]): the
+     * switches, the screens, the tile and the widget follow. Returns the site, or null when unknown. Main thread.
+     */
+    fun applyReceiveCalls(siteId: String, enabled: Boolean): Site? {
+        val current = hub ?: return null
+        val site = current.applyReceiveCalls(siteId, enabled) ?: return null
+        refresh()
+        LinhomeAccount.applyRegistration()
+        return site
+    }
+
+    /** Whether a call for paused [siteId] may ask that site first (it has a working connection that polls). */
+    fun canAskBeforeDeclining(siteId: String?): Boolean = hub?.canAskBeforeDeclining(siteId) == true
+
+    /** One poll of [siteId] now, its messages applied; false when not answered within [timeoutMs]. Main thread. */
+    suspend fun askBeforeDeclining(siteId: String?, timeoutMs: Long = WebhookEngine.CALL_TIME_POLL_TIMEOUT_MS): Boolean =
+        hub?.askBeforeDeclining(siteId, timeoutMs) == true
 
     /**
      * Forgets [siteId]: its connection, its queued events and its door mappings; with [removeDoors], its doors leave

@@ -125,12 +125,22 @@ class NotificationsManager(private val context: Context) {
             Log.i("[Notifications Manager] Call state changed [$state]")
 
             when (state) {
-                Call.State.IncomingEarlyMedia, Call.State.IncomingReceived -> displayIncomingCallNotification(
-                    call
-                )
+                Call.State.IncomingEarlyMedia, Call.State.IncomingReceived -> {
+                    // CoreContext's listener runs first: a call it declined has moved on already, and one it holds
+                    // while its paused site is asked gets its notification when it is decided (showIncomingCall).
+                    if (call.state != state) {
+                        Log.i("[Notifications Manager] Call is $state no more (${call.state}), no incoming call notification")
+                    } else if (coreContext.isHeldForDecision(call)) {
+                        Log.i("[Notifications Manager] Call held while its site is asked, no incoming call notification yet")
+                    } else {
+                        displayIncomingCallNotification(call)
+                    }
+                }
                 Call.State.End, Call.State.Error -> dismissCallNotification(call)
                 Call.State.Released -> {
-                    if (call.callLog?.status == Call.Status.Missed) {
+                    if (coreContext.consumeEndedWhileHeld(call)) {
+                        // It never rang here (held for its paused site, then ended): nothing was missed.
+                    } else if (call.callLog?.status == Call.Status.Missed) {
                         displayMissedCallNotification(call)
                     } else if (corePreferences.notifyAnsweredElsewhere && call.callLog?.status == Call.Status.DeclinedElsewhere) {
                         displayElsewhere(call,true)
@@ -547,6 +557,14 @@ class NotificationsManager(private val context: Context) {
     }
 
     @RequiresPermission("android.permission.POST_NOTIFICATIONS")
+    /** The incoming-call notification of a call that was held while its site was asked, now that it rings. */
+    @android.annotation.SuppressLint("MissingPermission") // as the listener that shows it otherwise
+    fun showIncomingCall(call: Call) {
+        if (call.state == Call.State.IncomingReceived || call.state == Call.State.IncomingEarlyMedia) {
+            displayIncomingCallNotification(call)
+        }
+    }
+
     private fun displayIncomingCallNotification(call: Call, useAsForeground: Boolean = false) {
         if (LinhomeApplication.someActivityRunning) {
             Log.i("[Notifications Manager] App is in foreground, skipping incoming call notification")

@@ -295,12 +295,12 @@ class SiteWebhooksTest {
         assertEquals(listOf(false), s.transport.states("alameda.example"))
         assertTrue(s.transport.states("lumiar.example").isEmpty())
         assertFalse(s.hub.config("alameda_hass") == null)
-        assertTrue(s.registry.registrationWanted(true))
+        assertTrue(s.registry.takesCalls(true))
         assertEquals(listOf("alameda_hass"), s.registry.pausedSites(true).map { it.id })
 
         assertTrue(s.hub.setSiteCallsEnabled("lumiar_hass", false))
         runCurrent()
-        assertFalse(s.registry.registrationWanted(true))
+        assertFalse(s.registry.takesCalls(true))
         assertTrue(s.registry.pausedSites(true).isEmpty())
 
         // And back on: only that site is told.
@@ -308,7 +308,7 @@ class SiteWebhooksTest {
         runCurrent()
         assertEquals(listOf(false, true), s.transport.states("alameda.example"))
         assertEquals(listOf(false), s.transport.states("lumiar.example"))
-        assertTrue(s.registry.registrationWanted(true))
+        assertTrue(s.registry.takesCalls(true))
     }
 
     @Test

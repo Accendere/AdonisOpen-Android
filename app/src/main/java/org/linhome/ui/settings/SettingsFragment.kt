@@ -72,6 +72,10 @@ class SettingsFragment : GenericFragment() {
         setupCards()
         setupAboutLinks()
         buildSiteCards()
+        // The main switch can change while Settings is open (the toolbar, the tile, or a site's receive_calls).
+        org.linhome.entities.LinhomeAccount.appEnabledLiveData.observe(viewLifecycleOwner) { enabled ->
+            if (settingsViewModel.appEnabled.value != enabled) settingsViewModel.appEnabled.value = enabled
+        }
         settingsViewModel.themeChangedEvent.observe(viewLifecycleOwner, Observer { changed ->
             if (changed) {
                 settingsViewModel.themeChangedEvent.value = false

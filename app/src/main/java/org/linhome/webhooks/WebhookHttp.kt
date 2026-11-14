@@ -94,12 +94,16 @@ object WebhookProtocol {
     /**
      * The switch state, as the site asked for it: `calls_resumed` / `calls_paused` when it listed them
      * (only the one it listed, if it listed one), else the old `state` with `enabled`. Null: nothing to send.
+     * [cause] `site` says the change applies the site's own `receive_calls` (so the site doesn't take it for a
+     * newer change made on the phone); null for the person's own change.
      */
-    fun stateRequest(config: WebhookConfig, enabled: Boolean, meta: WebhookMeta): WebhookRequest? {
+    fun stateRequest(config: WebhookConfig, enabled: Boolean, meta: WebhookMeta, cause: String? = null): WebhookRequest? {
         val event = if (enabled) WebhookEvents.CALLS_RESUMED else WebhookEvents.CALLS_PAUSED
+        val body = commonBody(config, meta).put("enabled", enabled)
+        cause?.let { body.put("cause", it) }
         return when {
-            config.sends(event) -> WebhookRequest(config.urlFor(event), commonBody(config, meta).put("enabled", enabled).toString(), headers(config))
-            config.sends(WebhookEvents.STATE) -> WebhookRequest(config.urlFor(WebhookEvents.STATE), commonBody(config, meta).put("enabled", enabled).toString(), headers(config))
+            config.sends(event) -> WebhookRequest(config.urlFor(event), body.toString(), headers(config))
+            config.sends(WebhookEvents.STATE) -> WebhookRequest(config.urlFor(WebhookEvents.STATE), body.toString(), headers(config))
             else -> null
         }
     }

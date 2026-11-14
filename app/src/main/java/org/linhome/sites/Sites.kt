@@ -58,7 +58,7 @@ object Sites {
     /** The main switch AND some site taking calls (or no site at all): whether SIP should be registered. */
     fun receivingCalls(): Boolean {
         val main = LinhomeApplication.corePreferences.appEnabled
-        return registry.registrationWanted(main)
+        return registry.takesCalls(main)
     }
 
     /** The door list was read (see [SiteRegistry.claimLegacyDoors]). */

@@ -40,6 +40,12 @@ sealed class PollMessage {
         override fun toString() = "ConfigUpdate(id=$id, host=${ClaimContract.hostOf(claimUrl)}, summary=$summary)"
     }
 
+    /**
+     * The site switched this phone's door calls for it (its card, an admin, a schedule): [enabled] for the site whose
+     * poll brought it, [by] who did it (a name to show), [at] when (ISO 8601, as sent).
+     */
+    data class ReceiveCalls(val id: String?, val enabled: Boolean, val by: String?, val at: String?) : PollMessage()
+
     /** A type this app doesn't know, or a message it can't use: acknowledged and ignored. */
     data class Ignored(val id: String?, val why: String) : PollMessage()
 
@@ -60,6 +66,16 @@ sealed class PollMessage {
                     }
                     ConfigUpdate(id, claimUrl, json.optString("summary", "").trim().ifEmpty { null })
                 }
+                "receive_calls" -> {
+                    // Only a real JSON boolean: a missing or odd value must never switch calls on or off.
+                    val enabled = json.opt("enabled") as? Boolean
+                        ?: return Ignored(id, "receive_calls without a boolean 'enabled'")
+                    ReceiveCalls(
+                        id, enabled,
+                        json.optString("by", "").trim().ifEmpty { null }?.take(80),
+                        json.optString("at", "").trim().ifEmpty { null }
+                    )
+                }
                 else -> Ignored(id, "unknown type '$type'")
             }
         }
@@ -70,6 +86,9 @@ sealed class PollMessage {
  * Handles what `poll` brought (Adonis `docs/features/adonis-open-webhooks.md`, "poll messages").
  * The engine has already queued every id for acknowledgement.
  *
+ * `receive_calls`: the site switched this phone's door calls for it (see [Webhooks.applyReceiveCalls]); a quiet
+ * notification says so, and by whom.
+ *
  * `config_update`: a notification "<site> has new settings"; tapping it opens the claim (fetch, import
  * screen, confirm), exactly as an `adonis://claim` link. Pushed claims are remembered so that dismissing the
  * import screen tells the site ([wasPushed], [Claims.decline][org.linhome.claim.Claims.decline]).
@@ -77,16 +96,26 @@ sealed class PollMessage {
 object PollMessages {
     private const val CHANNEL_ID = "adonis_open_site_updates"
     private const val NOTIFICATION_ID = 7341
+    private const val RECEIVE_CALLS_NOTIFICATION_ID = 7342
     private const val PREFS = "adonis_poll_messages"
 
-    /** [host] is the webhook host of the site whose poll brought [messages]. */
-    fun handle(context: Context, messages: List<JSONObject>, host: String?) {
+    /** [host] is the webhook host of the site whose poll brought [messages], [siteId] that site. Main thread. */
+    fun handle(context: Context, messages: List<JSONObject>, host: String?, siteId: String?) {
         messages.forEach { json ->
             when (val message = PollMessage.parse(json, host)) {
                 is PollMessage.ConfigUpdate -> {
                     Log.i("[PollMessages] $message")
                     remember(context, message.claimUrl)
                     notifyConfigUpdate(context, message)
+                }
+                is PollMessage.ReceiveCalls -> {
+                    Log.i("[PollMessages] $message for site $siteId")
+                    val site = siteId?.let { Webhooks.applyReceiveCalls(it, message.enabled) }
+                    if (site == null) {
+                        Log.w("[PollMessages] receive_calls for an unknown site, ignored")
+                    } else {
+                        notifyReceiveCalls(context, site.displayName, message)
+                    }
                 }
                 is PollMessage.Ignored -> Log.w("[PollMessages] Ignoring message ${message.id}: ${message.why}")
             }
@@ -114,13 +143,46 @@ object PollMessages {
         prefs.edit().putStringSet("pushed", setOf(claimUrl)).apply()
     }
 
-    private fun notifyConfigUpdate(context: Context, message: PollMessage.ConfigUpdate) {
+    /**
+     * Quiet (no sound, no vibration, low priority): the switch already changed, there is nothing to do, it only
+     * explains why the phone's switch moved. A newer change replaces it.
+     */
+    private fun notifyReceiveCalls(context: Context, siteName: String, message: PollMessage.ReceiveCalls) {
         val manager = NotificationManagerCompat.from(context)
+        ensureChannel(manager)
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context, RECEIVE_CALLS_NOTIFICATION_ID, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.notification_door)
+            .setContentTitle(Texts.get(if (message.enabled) "site_receive_calls_on_title" else "site_receive_calls_off_title", siteName))
+            .setContentText(message.by?.let { Texts.get("site_receive_calls_by", it) } ?: Texts.get("site_receive_calls_text"))
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+        try {
+            manager.notify(RECEIVE_CALLS_NOTIFICATION_ID, notification)
+        } catch (e: SecurityException) {
+            Log.w("[PollMessages] Can't show the receive-calls notice (no permission)")
+        }
+    }
+
+    private fun ensureChannel(manager: NotificationManagerCompat) {
         manager.createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
                 .setName(Texts.get("site_updates_channel_name"))
                 .build()
         )
+    }
+
+    private fun notifyConfigUpdate(context: Context, message: PollMessage.ConfigUpdate) {
+        val manager = NotificationManagerCompat.from(context)
+        ensureChannel(manager)
         // The claim URL travels inside the app only (explicit intent to our own activity).
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW

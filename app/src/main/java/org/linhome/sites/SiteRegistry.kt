@@ -63,6 +63,12 @@ enum class IncomingDecision {
     REFUSE_SITE_PAUSED
 }
 
+/**
+ * What a site's `receive_calls` does to the phone's switches: [mainEnabled] is the main switch afterwards, [switches]
+ * the site switches that change (site id to its new value). Nothing else changes.
+ */
+data class ReceiveCallsPlan(val mainEnabled: Boolean, val switches: Map<String, Boolean>)
+
 /** The registry's single JSON document between runs. */
 interface SiteStorage {
     fun load(): String?
@@ -202,22 +208,53 @@ class SiteRegistry(private val storage: SiteStorage) {
     /** The `enabled` [site] is told: the phone's main switch AND the site's own. */
     fun stateFor(site: Site, mainEnabled: Boolean): Boolean = mainEnabled && site.callsEnabled
 
-    /** SIP stays registered while the main switch is on and some site takes calls (or there are no sites). */
+    /**
+     * Whether the phone takes any door calls: the main switch is on and some site takes calls (or there are no sites).
+     * SIP stays registered either way (a paused call is declined when it arrives), so a site that switches the phone
+     * back on reaches it with its very next call.
+     */
     @Synchronized
-    fun registrationWanted(mainEnabled: Boolean): Boolean =
+    fun takesCalls(mainEnabled: Boolean): Boolean =
         mainEnabled && (sites.isEmpty() || sites.any { it.callsEnabled })
 
     /** The paused sites while the phone still takes calls for others (the account card's "Paused at …"). */
     @Synchronized
     fun pausedSites(mainEnabled: Boolean): List<Site> =
-        if (!registrationWanted(mainEnabled)) emptyList() else sites.filter { !it.callsEnabled }
+        if (!takesCalls(mainEnabled)) emptyList() else sites.filter { !it.callsEnabled }
 
     /** Whether an incoming call from [doorSite]'s door (null: no site, phone number, unknown) rings. */
     @Synchronized
     fun decideIncoming(mainEnabled: Boolean, doorSite: Site?): IncomingDecision {
-        if (!registrationWanted(mainEnabled)) return IncomingDecision.REFUSE_PAUSED
+        if (!takesCalls(mainEnabled)) return IncomingDecision.REFUSE_PAUSED
         val site = doorSite?.let { bySlot(it.slot) } ?: return IncomingDecision.RING
         return if (site.callsEnabled) IncomingDecision.RING else IncomingDecision.REFUSE_SITE_PAUSED
+    }
+
+    /**
+     * What `receive_calls` with [enabled] from [siteId] changes, so that only that site's calls change (null: no such
+     * site). The phone takes calls from a site while the main switch AND the site's own switch are on.
+     *
+     * - enabled=true, main switch on: the site's switch on.
+     * - enabled=true, main switch off: main on, the site on, every other site off, so the other sites stay off.
+     * - enabled=false, while the site is the only one taking calls: the main switch off (the site's switch stays on).
+     *   The phone takes no calls at all then, and the toolbar, tile and widget, which show the main switch, say so;
+     *   with a site switch off they would show "receiving" on a phone that takes no calls (a single-site phone
+     *   always ends here). Turning the main switch back on brings exactly this site back.
+     * - enabled=false otherwise: the site's switch off.
+     */
+    @Synchronized
+    fun planReceiveCalls(siteId: String, enabled: Boolean, mainEnabled: Boolean): ReceiveCallsPlan? {
+        val site = find(siteId) ?: return null
+        val others = sites.filter { it.slot != site.slot }
+        val switches = LinkedHashMap<String, Boolean>()
+        if (enabled) {
+            if (!site.callsEnabled) switches[site.id] = true
+            if (!mainEnabled) others.filter { it.callsEnabled }.forEach { switches[it.id] = false }
+            return ReceiveCallsPlan(true, switches)
+        }
+        if (mainEnabled && site.callsEnabled && others.none { it.callsEnabled }) return ReceiveCallsPlan(false, switches)
+        if (site.callsEnabled) switches[site.id] = false
+        return ReceiveCallsPlan(mainEnabled, switches)
     }
 
     /**

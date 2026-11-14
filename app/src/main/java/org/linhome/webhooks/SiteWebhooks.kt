@@ -36,7 +36,9 @@ class SiteWebhooks(
     private val newEngine: (Site) -> WebhookEngine,
     /** Deletes a removed site's stored connection, queue and acks. */
     private val forgetStorage: (Site) -> Unit = {},
-    private val logger: WebhookLog = WebhookLog { _, _ -> }
+    private val logger: WebhookLog = WebhookLog { _, _ -> },
+    /** Stores the main switch when a site's `receive_calls` changes it (no `state` fan-out: see [applyReceiveCalls]). */
+    private val setMainEnabled: (Boolean) -> Unit = {}
 ) {
     private val engines = HashMap<Int, WebhookEngine>()
     private var foreground = false
@@ -72,6 +74,30 @@ class SiteWebhooks(
         engine(site).onSwitchChanged(stateFor(site))
         return true
     }
+
+    /**
+     * [siteId]'s `receive_calls` with [enabled] (its poll brought it): the switches change as
+     * [SiteRegistry.planReceiveCalls] says, so only this site's calls change, and this site alone hears its resulting
+     * state with `cause: site`, even when nothing changed (that settles the message on the site). The other sites'
+     * state doesn't change, so they hear nothing. Returns the site afterwards, or null when there is no such site.
+     */
+    fun applyReceiveCalls(siteId: String, enabled: Boolean): Site? {
+        val plan = registry.planReceiveCalls(siteId, enabled, mainEnabled()) ?: return null
+        plan.switches.forEach { (id, on) -> registry.setCallsEnabled(id, on) }
+        if (plan.mainEnabled != mainEnabled()) setMainEnabled(plan.mainEnabled)
+        val site = registry.find(siteId) ?: return null
+        info("Site ${site.id} switched calls ${if (enabled) "on" else "off"} here: main ${if (plan.mainEnabled) "on" else "off"}, " +
+            "switches ${plan.switches.ifEmpty { "unchanged" }}")
+        engine(site).onSwitchChanged(stateFor(site), WebhookEngine.CAUSE_SITE)
+        return site
+    }
+
+    /** Whether an incoming call for paused [siteId] may first ask that site (see [WebhookEngine.canPollNow]). */
+    fun canAskBeforeDeclining(siteId: String?): Boolean = engineFor(siteId)?.canPollNow() == true
+
+    /** One poll of [siteId] now (see [WebhookEngine.pollNow]); false when it can't be asked or didn't answer in time. */
+    suspend fun askBeforeDeclining(siteId: String?, timeoutMs: Long = WebhookEngine.CALL_TIME_POLL_TIMEOUT_MS): Boolean =
+        engineFor(siteId)?.pollNow(timeoutMs) == true
 
     fun setForeground(isForeground: Boolean) {
         foreground = isForeground

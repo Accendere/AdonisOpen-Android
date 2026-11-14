@@ -88,6 +88,10 @@ class CoreContext(
         const val SILENT_ACCEPT_DURATION_MS = 30_000L
         /** After the SDK's own stopForeground (about a second after its service starts); the later ones catch slow devices. */
         val KEEP_ALIVE_CHECK_DELAYS_MS = listOf(3_000L, 10_000L, 30_000L)
+
+        /** `[app]` keys of [holdRinging]: set while ringing is held, and the `disable_ringing` value to put back. */
+        private const val RINGING_HELD = "adonis_ringing_held"
+        private const val RINGING_HELD_PREVIOUS = "adonis_ringing_held_previous"
     }
 
     var stopped = false
@@ -129,6 +133,28 @@ class CoreContext(
 
     /** Calls this phone hung up or declined itself, so `call_ended` can say `by: local`. */
     private val localHangups = HashSet<String>()
+
+    /** Whether a call rings, asking a paused site first (see IncomingGate). */
+    private val incomingGate by lazy {
+        org.linhome.sites.IncomingGate(
+            org.linhome.sites.Sites.registry,
+            mainEnabled = { corePreferences.appEnabled },
+            canAsk = { org.linhome.webhooks.Webhooks.canAskBeforeDeclining(it) },
+            ask = { org.linhome.webhooks.Webhooks.askBeforeDeclining(it) }
+        )
+    }
+
+    /** Calls (by call id) held while their door's paused site is asked: nothing rings, shows or vibrates yet. */
+    private val heldCalls = HashSet<String>()
+
+    /** Held calls that ended before they were decided (the door gave up, another phone answered): no notification. */
+    private val endedWhileHeld = HashSet<String>()
+
+    /** Whether [call] waits for its site's answer (NotificationsManager shows nothing for it yet). */
+    fun isHeldForDecision(call: Call): Boolean = call.callLog?.callId?.let { it in heldCalls } == true
+
+    /** Whether [call] was held and ended undecided: it never rang here, so no missed/elsewhere notification. Once. */
+    fun consumeEndedWhileHeld(call: Call): Boolean = call.callLog?.callId?.let { endedWhileHeld.remove(it) } == true
 
     /** Who answered a call this phone saw answered elsewhere: the site's answer, per call id, while it is awaited. */
     val answeredByLookups = HashMap<String, kotlinx.coroutines.Deferred<String?>>()
@@ -413,89 +439,7 @@ class CoreContext(
                 call.callLog?.callId?.let { lastCallStateMessage[it] = message }
             }
             if (state == Call.State.IncomingReceived) {
-                val callId = call.callLog?.callId
-                val doorSite = DeviceStore.findDeviceByAddress(call.remoteAddress)?.let { org.linhome.webhooks.Webhooks.siteForDoor(it.address) }
-                val siteId = doorSite?.id
-                val decision = org.linhome.sites.Sites.registry.decideIncoming(corePreferences.appEnabled, doorSite)
-                if (decision == org.linhome.sites.IncomingDecision.REFUSE_PAUSED) {
-                    Log.i("[Context] Calls are paused (main switch, or every site), declining incoming call")
-                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED, site = siteId) }
-                    call.decline(Reason.TemporarilyUnavailable)
-                    return
-                }
-                if (decision == org.linhome.sites.IncomingDecision.REFUSE_SITE_PAUSED) {
-                    // The phone stays registered for the other sites: this site's door calls are refused here, before
-                    // ringing, as busy (486), and the site hears call_ringing refused "paused" + call_summary.
-                    Log.i("[Context] Calls are paused at site $siteId, declining its door's incoming call")
-                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED, site = siteId) }
-                    call.decline(Reason.Busy)
-                    return
-                }
-
-                if (core.callsNb > 1) {
-                    callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_BUSY, site = siteId) }
-                    call.decline(Reason.Busy)
-                    return
-                    }
-
-                callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), gsmCallActive = gsmCallActive(), site = siteId) }
-
-                if (gsmCallActive()) {
-                    Log.w("[Context] Receiving a Linhome call while a GSM call is active")
-                }
-
-                if (core.callsNb == 1 && corePreferences.vibrateWhileIncomingCall) {
-                    val audioManager =
-                        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    if ((audioManager.ringerMode == AudioManager.RINGER_MODE_VIBRATE ||
-                                audioManager.ringerMode == AudioManager.RINGER_MODE_NORMAL)
-                    ) {
-                        val vibrator =
-                            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-                        if (vibrator.hasVibrator()) {
-                            Log.i("[Context] Starting incoming call vibration")
-                            Compatibility.vibrate(vibrator)
-                            isVibrating = true
-                        }
-                    }
-                }
-
-                val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-                if (!powerManager.isInteractive) {
-                    // Screen is off: acquire a wake lock to turn screen on so the notification's
-                    // full-screen intent will be honored by the system.
-                    // Do NOT call onIncomingReceived() here — on Android 16+ direct startActivity
-                    // from background creates an invisible activity (BAL_BLOCK) that conflicts
-                    // with the notification's full-screen intent launch.
-                    @Suppress("DEPRECATION")
-                    val wakeLock = powerManager.newWakeLock(
-                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-                        "linhome:incoming_call"
-                    )
-                    wakeLock.acquire(10000)
-                    Log.i("[Context] Screen was off, acquired wake lock for incoming call")
-                } else if (Version.sdkStrictlyBelow(Version.API24_NOUGAT_70) || LinhomeApplication.someActivityRunning) {
-                    onIncomingReceived(call)
-                }
-
-                if (corePreferences.autoAnswerEnabled) {
-                    val autoAnswerDelay = corePreferences.autoAnswerDelay
-                    if (autoAnswerDelay == 0) {
-                        Log.w("[Context] Auto answering call immediately")
-                        answerCall(call)
-                    } else {
-                        val timer = Timer("Auto answer scheduler")
-                        Log.i("[Context] Scheduling auto answering in $autoAnswerDelay milliseconds")
-                        timer.schedule(object : TimerTask() {
-                            override fun run() {
-                                if (!isCallSilentlyAccepted(call) && (call.state == Call.State.IncomingReceived || call.state == Call.State.IncomingEarlyMedia)) {
-                                    Log.w("[Context] Auto answering call")
-                                    answerCall(call)
-                                }
-                            }
-                        }, autoAnswerDelay.toLong())
-                    }
-                }
+                onIncomingCall(core, call)
             } else if (state == Call.State.OutgoingInit || state == Call.State.OutgoingProgress) {
                 onOutgoingStarted(call)
             } else if (state == Call.State.Connected) {
@@ -521,6 +465,10 @@ class CoreContext(
                     Log.i("[Context] Call is silently accepted for pre-answer action, staying in incoming view")
                 }
             } else if (state == Call.State.End || state == Call.State.Error || state == Call.State.Released) {
+                if (state != Call.State.Released && isHeldForDecision(call)) {
+                    call.callLog?.callId?.let { endedWhileHeld += it }
+                    Log.i("[Context] A call held for its site's answer ended before it was decided")
+                }
                 if (state != Call.State.Released) reportCallEnded(call, state)
                 clearSilentlyAccepted(call)
                 if (core.callsNb == 0) {
@@ -536,7 +484,7 @@ class CoreContext(
                     // End/Error, not Released: Released only comes once the Call object is freed, which can be much later.
                     if (state != Call.State.Released) {
                         // Back from the call types to special use (no call = no microphone or camera type).
-                        if (corePreferences.keepServiceAlive && org.linhome.sites.Sites.receivingCalls() && notificationsManager.service != null &&
+                        if (corePreferences.keepServiceAlive && notificationsManager.service != null &&
                             Compatibility.hasPermission(context, POST_NOTIFICATIONS)) {
                             notificationsManager.startForeground()
                         }
@@ -551,6 +499,163 @@ class CoreContext(
                 }
             }
         }
+    }
+
+    /**
+     * An incoming call: rings, is declined, or, when the phone would refuse it and its door's site can be asked, is
+     * held (no ringing, notification, screen or vibration) while that site is polled once, then decided again.
+     */
+    private fun onIncomingCall(core: Core, call: Call) {
+        val doorSite = DeviceStore.findDeviceByAddress(call.remoteAddress)?.let { org.linhome.webhooks.Webhooks.siteForDoor(it.address) }
+        val callId = call.callLog?.callId
+        when (val look = incomingGate.firstLook(doorSite)) {
+            is org.linhome.sites.IncomingGate.FirstLook.Decided -> onIncomingDecided(core, call, look.decision, doorSite?.id, held = false)
+            is org.linhome.sites.IncomingGate.FirstLook.AskSite -> {
+                if (callId == null) {
+                    onIncomingDecided(core, call, look.decisionNow, look.site.id, held = false)
+                    return
+                }
+                Log.i("[Context] Calls are paused for site ${look.site.id}: asking it before declining")
+                heldCalls += callId
+                holdRinging(core)
+                coroutineScope.launch {
+                    val (decision, answered) = try {
+                        incomingGate.decideAfterAsking(look.site)
+                    } finally {
+                        heldCalls -= callId
+                        if (heldCalls.isEmpty()) releaseRinging(core)
+                    }
+                    val siteId = org.linhome.sites.Sites.registry.bySlot(look.site.slot)?.id ?: look.site.id
+                    if (call.state != Call.State.IncomingReceived && call.state != Call.State.IncomingEarlyMedia) {
+                        Log.i("[Context] Site $siteId ${if (answered) "answered" else "didn't answer"}, but the call is over (${call.state})")
+                        return@launch
+                    }
+                    Log.i("[Context] Site $siteId ${if (answered) "answered" else "didn't answer in time"}: $decision")
+                    onIncomingDecided(core, call, decision, siteId, held = true)
+                }
+            }
+        }
+    }
+
+    /** [decision] for [call] from [siteId]'s door; [held] when it was held while its site was asked. */
+    private fun onIncomingDecided(core: Core, call: Call, decision: org.linhome.sites.IncomingDecision, siteId: String?, held: Boolean) {
+        val callId = call.callLog?.callId
+        if (decision == org.linhome.sites.IncomingDecision.REFUSE_PAUSED) {
+            Log.i("[Context] Calls are paused (main switch, or every site), declining incoming call")
+            callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED, site = siteId) }
+            call.decline(Reason.TemporarilyUnavailable)
+            return
+        }
+        if (decision == org.linhome.sites.IncomingDecision.REFUSE_SITE_PAUSED) {
+            // This site's door calls are refused here, before ringing, as busy (486), and the site hears
+            // call_ringing refused "paused" + call_summary. The phone stays registered (for the other sites, and so
+            // that this site can switch it back on).
+            Log.i("[Context] Calls are paused at site $siteId, declining its door's incoming call")
+            callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_PAUSED, site = siteId) }
+            call.decline(Reason.Busy)
+            return
+        }
+
+        if (core.callsNb > 1) {
+            callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), org.linhome.webhooks.CallOutcome.REFUSED_BUSY, site = siteId) }
+            call.decline(Reason.Busy)
+            return
+        }
+
+        callId?.let { callReporter.onIncoming(it, doorNameFor(call), call.remoteAddress?.asStringUriOnly(), gsmCallActive = gsmCallActive(), site = siteId) }
+
+        if (held) {
+            // What the listeners skipped while the call was held: the ringtone and the incoming-call notification.
+            startRingingAfterHold(core, call)
+            notificationsManager.showIncomingCall(call)
+        }
+
+        if (gsmCallActive()) {
+            Log.w("[Context] Receiving a Linhome call while a GSM call is active")
+        }
+
+        if (core.callsNb == 1 && corePreferences.vibrateWhileIncomingCall) {
+            val audioManager =
+                context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if ((audioManager.ringerMode == AudioManager.RINGER_MODE_VIBRATE ||
+                        audioManager.ringerMode == AudioManager.RINGER_MODE_NORMAL)
+            ) {
+                val vibrator =
+                    context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (vibrator.hasVibrator()) {
+                    Log.i("[Context] Starting incoming call vibration")
+                    Compatibility.vibrate(vibrator)
+                    isVibrating = true
+                }
+            }
+        }
+
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!powerManager.isInteractive) {
+            // Screen is off: acquire a wake lock to turn screen on so the notification's
+            // full-screen intent will be honored by the system.
+            // Do NOT call onIncomingReceived() here — on Android 16+ direct startActivity
+            // from background creates an invisible activity (BAL_BLOCK) that conflicts
+            // with the notification's full-screen intent launch.
+            @Suppress("DEPRECATION")
+            val wakeLock = powerManager.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "linhome:incoming_call"
+            )
+            wakeLock.acquire(10000)
+            Log.i("[Context] Screen was off, acquired wake lock for incoming call")
+        } else if (Version.sdkStrictlyBelow(Version.API24_NOUGAT_70) || LinhomeApplication.someActivityRunning) {
+            onIncomingReceived(call)
+        }
+
+        if (corePreferences.autoAnswerEnabled) {
+            val autoAnswerDelay = corePreferences.autoAnswerDelay
+            if (autoAnswerDelay == 0) {
+                Log.w("[Context] Auto answering call immediately")
+                answerCall(call)
+            } else {
+                val timer = Timer("Auto answer scheduler")
+                Log.i("[Context] Scheduling auto answering in $autoAnswerDelay milliseconds")
+                timer.schedule(object : TimerTask() {
+                    override fun run() {
+                        if (!isCallSilentlyAccepted(call) && (call.state == Call.State.IncomingReceived || call.state == Call.State.IncomingEarlyMedia)) {
+                            Log.w("[Context] Auto answering call")
+                            answerCall(call)
+                        }
+                    }
+                }, autoAnswerDelay.toLong())
+            }
+        }
+    }
+
+    /**
+     * While a call is held, the SDK must not ring: its platform helper starts the ringtone from its own listener,
+     * which runs right after this one (it is added when the Core starts, ours before), unless `[sound]
+     * disable_ringing` is 1. Set it for the hold and put the previous value back after; the marker in `[app]` lets
+     * the next start put it back if the app died in between.
+     */
+    private fun holdRinging(core: Core) {
+        val config = core.config
+        if (config.getBool("app", RINGING_HELD, false)) return
+        config.setInt("app", RINGING_HELD_PREVIOUS, config.getInt("sound", "disable_ringing", 0))
+        config.setBool("app", RINGING_HELD, true)
+        config.setInt("sound", "disable_ringing", 1)
+    }
+
+    private fun releaseRinging(core: Core) {
+        val config = core.config
+        if (!config.getBool("app", RINGING_HELD, false)) return
+        config.setInt("sound", "disable_ringing", config.getInt("app", RINGING_HELD_PREVIOUS, 0))
+        config.setBool("app", RINGING_HELD, false)
+    }
+
+    /** The ringtone the SDK would have started when the call arrived (the same conditions as its own listener). */
+    private fun startRingingAfterHold(core: Core, call: Call) {
+        if (!core.isNativeRingingEnabled || core.callsNb != 1) return
+        if (core.config.getInt("sound", "disable_ringing", 0) == 1) return
+        if (!org.linphone.core.tools.AndroidPlatformHelper.isReady()) return
+        Log.i("[Context] Call decided after its site answered: start ringing")
+        org.linphone.core.tools.AndroidPlatformHelper.instance().startRinging(call.remoteAddress)
     }
 
     init {
@@ -568,21 +673,26 @@ class CoreContext(
     fun start(isPush: Boolean = false, startService: Boolean = true) {
         Log.i("[Context] Starting")
 
-        notificationsManager.onCoreReady()
-
+        // Ours first: it decides an incoming call (decline, ring, or hold it while its site is asked) before the
+        // notifications manager shows anything for it, and before the SDK's own listener (added by core.start()) rings.
         core.addListener(listener)
+        notificationsManager.onCoreReady()
         if (isPush) {
             Log.i("[Context] Push received, assume in background")
             core.enterBackground()
         }
         core.config.setBool("net", "use_legacy_push_notification_params", true)
+        // The app died while a call was held: put ringing back.
+        releaseRinging(core)
         core.start()
 
         configureCore()
+        // Paused phones stay registered (see LinhomeAccount.applyRegistration); one paused by an older version isn't.
+        org.linhome.entities.LinhomeAccount.registerAll(core)
 
         initPhoneStateListener()
 
-        if (corePreferences.keepServiceAlive && org.linhome.sites.Sites.receivingCalls() && Compatibility.hasPermission(context,
+        if (corePreferences.keepServiceAlive && Compatibility.hasPermission(context,
                 POST_NOTIFICATIONS)) {
             org.linphone.core.tools.Log.i("[Context] Background mode setting is enabled, starting Service")
             notificationsManager.startForeground()
@@ -755,7 +865,7 @@ class CoreContext(
         for (delayMs in KEEP_ALIVE_CHECK_DELAYS_MS) {
             coroutineScope.launch {
                 delay(delayMs)
-                if (!corePreferences.keepServiceAlive || !org.linhome.sites.Sites.receivingCalls() || core.callsNb > 0) {
+                if (!corePreferences.keepServiceAlive || core.callsNb > 0) {
                     return@launch
                 }
                 val service = notificationsManager.service

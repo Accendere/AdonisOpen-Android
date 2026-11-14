@@ -164,7 +164,8 @@ class SettingsViewModel : ViewModelWithTools() {
 
     val appEnabledListener = object : SettingListenerStub() {
         override fun onBoolValueChanged(newValue: Boolean) {
-            LinhomeAccount.setAppEnabled(newValue)
+            // Also called when the switch follows a change made elsewhere (a site's receive_calls): nothing to do then.
+            if (newValue != corePref.appEnabled) LinhomeAccount.setAppEnabled(newValue)
         }
     }
 
@@ -189,7 +190,7 @@ class SettingsViewModel : ViewModelWithTools() {
     val enableBackgroundMode = object : SettingListenerStub() {
         override fun onBoolValueChanged(newValue: Boolean) {
             corePref.keepServiceAlive = newValue
-            if (newValue && corePref.appEnabled) {
+            if (newValue) {
                 LinhomeApplication.coreContext.notificationsManager.startForeground()
             } else {
                 LinhomeApplication.coreContext.notificationsManager.stopForegroundNotificationIfPossible()

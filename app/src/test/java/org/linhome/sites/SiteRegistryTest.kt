@@ -161,8 +161,8 @@ class SiteRegistryTest {
     @Test
     fun stateAndRegistrationFollowBothSwitches() {
         val registry = SiteRegistry(MemoryStorage())
-        assertTrue(registry.registrationWanted(mainEnabled = true))
-        assertFalse(registry.registrationWanted(mainEnabled = false))
+        assertTrue(registry.takesCalls(mainEnabled = true))
+        assertFalse(registry.takesCalls(mainEnabled = false))
         val a = registry.add("a", "Alameda")
         val b = registry.add("b", "Lumiar")
         registry.setCallsEnabled("a", false)
@@ -170,10 +170,10 @@ class SiteRegistryTest {
         assertFalse(registry.stateFor(pausedA, mainEnabled = true))
         assertTrue(registry.stateFor(b, mainEnabled = true))
         assertFalse(registry.stateFor(b, mainEnabled = false))
-        assertTrue(registry.registrationWanted(mainEnabled = true))
+        assertTrue(registry.takesCalls(mainEnabled = true))
         assertEquals(listOf("Alameda"), registry.pausedSites(mainEnabled = true).map { it.displayName })
         registry.setCallsEnabled("b", false)
-        assertFalse(registry.registrationWanted(mainEnabled = true))
+        assertFalse(registry.takesCalls(mainEnabled = true))
         // Every site paused reads as the phone paused, not as "paused at" each one.
         assertTrue(registry.pausedSites(mainEnabled = true).isEmpty())
         assertEquals(a.slot, pausedA.slot)

@@ -21,7 +21,9 @@ package org.linhome.webhooks
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -100,6 +102,12 @@ class WebhookEngine(
 
         /** How long `who_answered` may take before the app gives up (the site itself waits ~2 s). */
         const val WHO_ANSWERED_TIMEOUT_MS = 4_000L
+
+        /** How long a call for a paused site waits for that site's poll before it is declined anyway. */
+        const val CALL_TIME_POLL_TIMEOUT_MS = 2_500L
+
+        /** The `cause` of a state change that applies the site's own `receive_calls`. */
+        const val CAUSE_SITE = "site"
     }
 
     private val scope = CoroutineScope(SupervisorJob() + mainDispatcher)
@@ -114,6 +122,12 @@ class WebhookEngine(
     /** The switch state that still has to reach the site, or null when the site has the latest one. */
     var pendingState: Boolean? = null
         private set
+
+    /** The `cause` sent with [pendingState] (see [WebhookProtocol.stateRequest]). */
+    private var pendingCause: String? = null
+
+    /** The one-off poll of [pollNow] while it runs (a second call waits for the same one). */
+    private var pollNowJob: Deferred<Boolean>? = null
 
     /** True while a failed `state` send waits for its next try. */
     var waitingForRetry: Boolean = false
@@ -145,9 +159,9 @@ class WebhookEngine(
         updatePolling()
     }
 
-    /** The door-call switch changed. */
-    fun onSwitchChanged(enabled: Boolean) {
-        sendState(enabled)
+    /** The door-call switch changed; [cause] `site` when it applies the site's `receive_calls` ([CAUSE_SITE]). */
+    fun onSwitchChanged(enabled: Boolean, cause: String? = null) {
+        sendState(enabled, cause)
     }
 
     /**
@@ -296,7 +310,7 @@ class WebhookEngine(
         val state = pendingState ?: return
         if (waitingForRetry) {
             info("Network is back: resending state")
-            sendState(state)
+            sendState(state, pendingCause)
         }
     }
 
@@ -351,6 +365,68 @@ class WebhookEngine(
         updatePolling()
     }
 
+    /**
+     * Whether [pollNow] may ask this site: it has a connection that works and polls at all (a site that set
+     * `poll_mode` never is never polled, not even for a call).
+     */
+    fun canPollNow(): Boolean {
+        val config = storage.config ?: return false
+        return storage.status == WebhookStatus.ACTIVE && config.pollMode != PollMode.NEVER
+    }
+
+    /**
+     * One poll now, outside the timer, for an incoming call of a paused site: its messages are handled (and
+     * acknowledged) exactly as the timer's, so a `receive_calls` that switched this phone on is applied before the
+     * call is decided. True when the site answered within [timeoutMs]; an answer that comes later is still handled
+     * (the switch catches up; the call was decided without it).
+     */
+    suspend fun pollNow(timeoutMs: Long = CALL_TIME_POLL_TIMEOUT_MS): Boolean {
+        if (!canPollNow()) return false
+        val running = pollNowJob?.takeIf { it.isActive } ?: scope.async {
+            val config = storage.config ?: return@async false
+            val acks = storage.pendingAcks
+            val request = WebhookProtocol.pollRequest(config, storage.deviceId, acks, meta())
+            // In the engine's scope, not the caller's: the caller's timeout must not drop an answer already on its way.
+            when (val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }) {
+                is WebhookOutcome.Ok -> {
+                    handlePollAnswer(outcome, acks)
+                    true
+                }
+                WebhookOutcome.Unauthorized -> {
+                    warn("Site answered 401 to a call-time poll: the person must scan their link again; stopping all calls")
+                    stopAll(WebhookStatus.UNAUTHORIZED)
+                    false
+                }
+                WebhookOutcome.NotFound -> {
+                    warn("Site answered 404 to a call-time poll: webhooks are off; stopping all calls until a new link")
+                    stopAll(WebhookStatus.NOT_FOUND)
+                    false
+                }
+                else -> {
+                    info("Call-time poll not answered (${outcome.javaClass.simpleName})")
+                    false
+                }
+            }
+        }.also { pollNowJob = it }
+        val answered = withTimeoutOrNull(timeoutMs) { running.await() }
+        if (answered == null) info("Call-time poll: no answer within $timeoutMs ms")
+        return answered == true
+    }
+
+    /** A poll answered 200: the acks it carried are done; its messages are queued for acknowledgement and handed over. */
+    private fun handlePollAnswer(outcome: WebhookOutcome.Ok, acks: Set<String>) {
+        if (acks.isNotEmpty()) storage.pendingAcks = storage.pendingAcks - acks
+        val array = outcome.body?.optJSONArray("messages")
+        val messages = (0 until (array?.length() ?: 0)).mapNotNull { array?.optJSONObject(it) }
+        if (messages.isEmpty()) return
+        info("Poll returned ${messages.size} message(s)")
+        // Every message with an id is acknowledged in the next poll, whatever its type:
+        // an unknown type is ignored, but acknowledged so the site stops re-sending it.
+        val ids = messages.mapNotNull { it.optString("id", "").ifEmpty { null } }
+        if (ids.isNotEmpty()) storage.pendingAcks = storage.pendingAcks + ids
+        onPollMessages(messages)
+    }
+
     fun shouldPoll(): Boolean {
         val config = storage.config ?: return false
         if (storage.status != WebhookStatus.ACTIVE) return false
@@ -379,6 +455,7 @@ class WebhookEngine(
     private fun stopAll(newStatus: WebhookStatus) {
         setStatus(newStatus)
         pendingState = null
+        pendingCause = null
         waitingForRetry = false
         stateJob?.cancel()
         eventsJob?.cancel()
@@ -462,34 +539,38 @@ class WebhookEngine(
 
     /**
      * Sends [enabled], replacing any send still waiting: only the latest state matters, so a switch
-     * flipped several times while offline ends in one request with the final state.
+     * flipped several times while offline ends in one request with the final state (and that change's [cause]).
      */
-    private fun sendState(enabled: Boolean) {
+    private fun sendState(enabled: Boolean, cause: String? = null) {
         if (!canCall()) return
         pendingState = enabled
+        pendingCause = cause
         stateJob?.cancel()
         stateJob = scope.launch {
             var attempt = 0
             while (isActive) {
                 val config = storage.config ?: return@launch
                 if (storage.status != WebhookStatus.ACTIVE) return@launch
-                val request = WebhookProtocol.stateRequest(config, enabled, meta())
+                val request = WebhookProtocol.stateRequest(config, enabled, meta(), cause)
                 if (request == null) {
                     // The site listed neither calls_paused/calls_resumed nor state for this change.
                     pendingState = null
+                    pendingCause = null
                     return@launch
                 }
                 waitingForRetry = false
                 val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }
                 when (outcome) {
                     is WebhookOutcome.Ok -> {
-                        info("State sent (enabled=$enabled)")
+                        info("State sent (enabled=$enabled${cause?.let { ", cause=$it" } ?: ""})")
                         pendingState = null
+                        pendingCause = null
                         return@launch
                     }
                     is WebhookOutcome.AppBug -> {
                         error("State rejected as a bug in the app: HTTP ${outcome.status} ${outcome.code ?: ""} ${outcome.message ?: ""}".trim())
                         pendingState = null
+                        pendingCause = null
                         return@launch
                     }
                     WebhookOutcome.Unauthorized -> {
@@ -541,19 +622,7 @@ class WebhookEngine(
                 val outcome = withContext(ioDispatcher) { WebhookProtocol.call(transport, request) }
                 var wait = config.pollingIntervalSeconds * 1000L
                 when (outcome) {
-                    is WebhookOutcome.Ok -> {
-                        if (acks.isNotEmpty()) storage.pendingAcks = storage.pendingAcks - acks
-                        val array = outcome.body?.optJSONArray("messages")
-                        val messages = (0 until (array?.length() ?: 0)).mapNotNull { array?.optJSONObject(it) }
-                        if (messages.isNotEmpty()) {
-                            info("Poll returned ${messages.size} message(s)")
-                            // Every message with an id is acknowledged in the next poll, whatever its type:
-                            // an unknown type is ignored, but acknowledged so the site stops re-sending it.
-                            val ids = messages.mapNotNull { it.optString("id", "").ifEmpty { null } }
-                            if (ids.isNotEmpty()) storage.pendingAcks = storage.pendingAcks + ids
-                            onPollMessages(messages)
-                        }
-                    }
+                    is WebhookOutcome.Ok -> handlePollAnswer(outcome, acks)
                     is WebhookOutcome.AppBug -> {
                         // The poll body never changes, so resending it would fail the same way.
                         error("Poll rejected as a bug in the app: HTTP ${outcome.status} ${outcome.code ?: ""} ${outcome.message ?: ""}; polling stopped until the next app start or link".trim())
