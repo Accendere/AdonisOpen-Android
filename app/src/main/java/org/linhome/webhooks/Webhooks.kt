@@ -126,6 +126,12 @@ class SharedPreferencesWebhookStorage(context: Context, prefsName: String = DEVI
             prefs.edit().putStringSet("pending_acks", value.toSet()).apply()
         }
 
+    override var stateChangedAt: String?
+        get() = prefs.getString("state_changed_at", null)
+        set(value) {
+            prefs.edit().apply { if (value == null) remove("state_changed_at") else putString("state_changed_at", value) }.apply()
+        }
+
     private val appContext = context.applicationContext
 
     /**

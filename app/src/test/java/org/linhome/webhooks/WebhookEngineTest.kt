@@ -38,6 +38,7 @@ class WebhookEngineTest {
         override val deviceId: String = "device-1"
         override var eventQueue: List<String> = emptyList()
         override var pendingAcks: Set<String> = emptySet()
+        override var stateChangedAt: String? = null
     }
 
     /** Answers with the queued statuses (then 200) and records every request. */

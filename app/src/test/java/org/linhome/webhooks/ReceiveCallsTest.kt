@@ -28,6 +28,7 @@ import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -48,6 +49,7 @@ class ReceiveCallsTest {
         override val deviceId: String = "device-1"
         override var eventQueue: List<String> = emptyList()
         override var pendingAcks: Set<String> = emptySet()
+        override var stateChangedAt: String? = null
     }
 
     private class MemorySiteStorage : SiteStorage {
@@ -334,6 +336,112 @@ class ReceiveCallsTest {
         assertEquals(setOf("m_late"), storage.pendingAcks)
         assertEquals(1, requests.size)
         engine.shutdown()
+    }
+
+    // --- `at` of state reports ---
+
+    private class Clock(var now: String = "2026-11-14T10:00:00+00:00")
+
+    /** Fails the first [failures] sends (no answer), then answers 200; records every request. */
+    private class FlakyTransport(var failures: Int = 0) : WebhookTransport {
+        val requests = mutableListOf<WebhookRequest>()
+        override fun send(request: WebhookRequest): HttpAnswer {
+            requests += request
+            if (failures > 0) {
+                failures--
+                throw java.io.IOException("network down")
+            }
+            return HttpAnswer(200, """{"success":true,"messages":[]}""")
+        }
+
+        fun stateAts() = requests.filter { it.url.endsWith("/calls_paused") || it.url.endsWith("/calls_resumed") }
+            .map { JSONObject(it.body).getString("at") }
+    }
+
+    private fun TestScope.clockedEngine(storage: WebhookStorage, transport: WebhookTransport, clock: Clock): WebhookEngine {
+        val d = StandardTestDispatcher(testScheduler)
+        return WebhookEngine(storage, transport, d, d, logger = { _, _ -> }, clock = { clock.now })
+    }
+
+    @Test
+    fun aFreshChangeSendsAndRemembersItsOwnTime() = runTest {
+        val clock = Clock("2026-11-14T10:00:00+00:00")
+        val storage = MemoryStorage(config("site.example", PollMode.NEVER))
+        val transport = FlakyTransport()
+        val engine = clockedEngine(storage, transport, clock)
+        engine.onSwitchChanged(false)
+        runCurrent()
+        assertEquals(listOf("2026-11-14T10:00:00+00:00"), transport.stateAts())
+        assertEquals("2026-11-14T10:00:00+00:00", storage.stateChangedAt)
+        engine.shutdown()
+    }
+
+    /** The card switched the phone on at 10:05; an app start at 10:06 repeats the phone's 10:00 state, not a 10:06 one. */
+    @Test
+    fun anAppStartRepeatsTheStateWithTheTimeOfTheLastRealChange() = runTest {
+        val clock = Clock("2026-11-14T10:06:00+00:00")
+        val storage = MemoryStorage(config("site.example", PollMode.NEVER)).apply { stateChangedAt = "2026-11-14T10:00:00+00:00" }
+        val transport = FlakyTransport()
+        val engine = clockedEngine(storage, transport, clock)
+        engine.onAppStart(enabled = false)
+        runCurrent()
+        assertEquals(listOf("2026-11-14T10:00:00+00:00"), transport.stateAts())
+        assertEquals("2026-11-14T10:00:00+00:00", storage.stateChangedAt)
+        engine.shutdown()
+    }
+
+    @Test
+    fun withoutAKnownChangeTheReportSaysNow() = runTest {
+        val clock = Clock("2026-11-14T10:06:00+00:00")
+        val transport = FlakyTransport()
+        val engine = clockedEngine(MemoryStorage(config("site.example", PollMode.NEVER)), transport, clock)
+        engine.onAppStart(enabled = true)
+        runCurrent()
+        assertEquals(listOf("2026-11-14T10:06:00+00:00"), transport.stateAts())
+        engine.shutdown()
+    }
+
+    @Test
+    fun retriesKeepTheTimeOfTheChange() = runTest {
+        val clock = Clock("2026-11-14T10:00:00+00:00")
+        val transport = FlakyTransport(failures = 2)
+        val engine = clockedEngine(MemoryStorage(config("site.example", PollMode.NEVER)), transport, clock)
+        engine.onSwitchChanged(true, WebhookEngine.CAUSE_SITE)
+        runCurrent()
+        clock.now = "2026-11-14T10:00:10+00:00"
+        testScheduler.advanceTimeBy(10_000); runCurrent()
+        clock.now = "2026-11-14T10:01:00+00:00"
+        engine.onNetworkAvailable() // resends at once
+        runCurrent()
+        assertEquals(List(3) { "2026-11-14T10:00:00+00:00" }, transport.stateAts())
+        // The cause survives the retries too.
+        assertEquals("site", JSONObject(transport.requests.last().body).getString("cause"))
+        assertNull(engine.pendingState)
+        engine.shutdown()
+    }
+
+    @Test
+    fun aNewLinkRepeatsTheStateWithTheTimeOfTheLastRealChange() = runTest {
+        val clock = Clock("2026-11-14T11:00:00+00:00")
+        val storage = MemoryStorage(null).apply { stateChangedAt = "2026-11-14T10:00:00+00:00" }
+        val transport = FlakyTransport()
+        val engine = clockedEngine(storage, transport, clock)
+        engine.onLinkApplied(config("site.example", PollMode.NEVER), enabled = true)
+        runCurrent()
+        assertEquals(listOf("2026-11-14T10:00:00+00:00"), transport.stateAts())
+        engine.shutdown()
+    }
+
+    @Test
+    fun aSitesReceiveCallsIsAFreshChangeForThatSiteOnly() = runTest {
+        val s = setup()
+        val alameda = s.storages[s.site("alameda_hass").slot]!!
+        val lumiar = s.storages[s.site("lumiar_hass").slot]!!
+        s.hub.applyReceiveCalls("alameda_hass", false)
+        runCurrent()
+        assertNotNull(alameda.stateChangedAt)
+        assertEquals(alameda.stateChangedAt, s.transport.bodies("alameda.example", "calls_paused").single().getString("at"))
+        assertNull(lumiar.stateChangedAt) // its state didn't change
     }
 
     // --- the decision ---

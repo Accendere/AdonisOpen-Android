@@ -62,6 +62,13 @@ interface WebhookStorage {
 
     /** Ids of poll messages handled but not yet acknowledged to the site. */
     var pendingAcks: Set<String>
+
+    /**
+     * When this site's door-call switch last really changed (the main switch or the site's own, any cause), ISO 8601;
+     * null before the first change. Sent as `at` with every state report that isn't a fresh change (app start, new
+     * link, retries), so the site never takes a repeat of an old state for a newer change than its own `receive_calls`.
+     */
+    var stateChangedAt: String?
 }
 
 /** Log sink; messages never contain the token. */
@@ -126,6 +133,9 @@ class WebhookEngine(
     /** The `cause` sent with [pendingState] (see [WebhookProtocol.stateRequest]). */
     private var pendingCause: String? = null
 
+    /** The `at` sent with [pendingState]: when that state came about, not when it is (re)sent. */
+    private var pendingAt: String? = null
+
     /** The one-off poll of [pollNow] while it runs (a second call waits for the same one). */
     private var pollNowJob: Deferred<Boolean>? = null
 
@@ -161,7 +171,10 @@ class WebhookEngine(
 
     /** The door-call switch changed; [cause] `site` when it applies the site's `receive_calls` ([CAUSE_SITE]). */
     fun onSwitchChanged(enabled: Boolean, cause: String? = null) {
-        sendState(enabled, cause)
+        // A fresh change: its own time, remembered for every later report of this state.
+        val at = clock()
+        storage.stateChangedAt = at
+        sendState(enabled, cause, at)
     }
 
     /**
@@ -310,7 +323,7 @@ class WebhookEngine(
         val state = pendingState ?: return
         if (waitingForRetry) {
             info("Network is back: resending state")
-            sendState(state, pendingCause)
+            sendState(state, pendingCause, pendingAt)
         }
     }
 
@@ -540,18 +553,21 @@ class WebhookEngine(
     /**
      * Sends [enabled], replacing any send still waiting: only the latest state matters, so a switch
      * flipped several times while offline ends in one request with the final state (and that change's [cause]).
+     * [at] is when the state came about: by default the last real change ([WebhookStorage.stateChangedAt]), so an app
+     * start, a new link or a retry repeats the state with its old time and never looks newer than a later site change.
      */
-    private fun sendState(enabled: Boolean, cause: String? = null) {
+    private fun sendState(enabled: Boolean, cause: String? = null, at: String? = storage.stateChangedAt ?: clock()) {
         if (!canCall()) return
         pendingState = enabled
         pendingCause = cause
+        pendingAt = at
         stateJob?.cancel()
         stateJob = scope.launch {
             var attempt = 0
             while (isActive) {
                 val config = storage.config ?: return@launch
                 if (storage.status != WebhookStatus.ACTIVE) return@launch
-                val request = WebhookProtocol.stateRequest(config, enabled, meta(), cause)
+                val request = WebhookProtocol.stateRequest(config, enabled, meta(at), cause)
                 if (request == null) {
                     // The site listed neither calls_paused/calls_resumed nor state for this change.
                     pendingState = null
