@@ -50,13 +50,18 @@ import org.linhome.webhooks.PollMode
  * The full-screen "import settings" page: a summary with Apply on top, and "Show details" for people who
  * want to check every part and pick only some. Everything that changes something is pre-selected; what is
  * unchanged is listed, unselected. The setup (with the SIP password) stays in memory: never in an Intent.
+ *
+ * [siteMessage] is what the site said changed, in its own words, when it pushed these settings (`config_update`'s
+ * summary, e.g. "Novo botão para abrir a garagem durante as chamadas"). It is the one part written for the people
+ * using the app rather than for whoever checks the details, so it comes first, set apart, before anything technical.
  */
 class ImportSettingsScreen(
     private val activity: MainActivity,
     private val config: AdonisConfig,
     private val plan: ImportPlan,
     private val onApply: (ImportSelection) -> Unit,
-    private val onCancel: () -> Unit
+    private val onCancel: () -> Unit,
+    private val siteMessage: String? = null
 ) {
     private var sip = plan.defaultSelection().sip
     private val devices = plan.defaultSelection().devices.toMutableSet()
@@ -83,6 +88,7 @@ class ImportSettingsScreen(
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(4), dp(20), dp(20))
         }
+        siteMessage?.trim()?.takeIf { it.isNotEmpty() }?.let { content.addView(siteMessageCard(it)) }
         content.addView(context())
         summary = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         content.addView(summary)
@@ -117,6 +123,34 @@ class ImportSettingsScreen(
             val from = config.claimUrl?.let { Texts.get("adonis_claim_from", ClaimContract.hostOf(it)) }
             from?.takeIf { config.siteName != null }?.let { addView(text(it, 13f, secondary = true)) }
         })
+    }
+
+    /**
+     * The site's own words about what changed: a card tinted with the accent colour, with an accent bar on its start
+     * edge and larger text than anything below it, so it reads first.
+     */
+    private fun siteMessageCard(message: String): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        val radius = dp(12).toFloat()
+        background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = radius
+            setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(color(R.color.color_a), 0x26))
+        }
+        clipToOutline = true
+        addView(View(activity).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadii = floatArrayOf(radius, radius, 0f, 0f, 0f, 0f, radius, radius)
+                setColor(color(R.color.color_a))
+            }
+        }, LinearLayout.LayoutParams(dp(5), ViewGroup.LayoutParams.MATCH_PARENT))
+        addView(text(message, 18f, bold = true).apply {
+            setPadding(dp(14), dp(14), dp(16), dp(14))
+            setLineSpacing(0f, 1.15f)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(4)
+            bottomMargin = dp(12)
+        }
     }
 
     /** Why this screen opened, and that nothing changes until Apply (people opening a link from another app may not expect it). */

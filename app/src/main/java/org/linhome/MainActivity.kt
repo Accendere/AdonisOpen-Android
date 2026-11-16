@@ -250,6 +250,7 @@ class MainActivity : GenericActivity() {
         val shown = if (pushed) config.copy(source = org.linhome.utils.ImportSource.SITE_UPDATE) else config
         currentAutoConfigDialog = org.linhome.ui.importsettings.ImportSettingsScreen(
             this, shown, plan,
+            siteMessage = org.linhome.webhooks.PollMessages.pushedSummary(this, config.claimUrl),
             onApply = { selection ->
                 currentAutoConfigDialog = null
                 val configToApply = pendingAdonisConfig ?: config

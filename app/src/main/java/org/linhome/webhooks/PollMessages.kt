@@ -91,7 +91,8 @@ sealed class PollMessage {
  *
  * `config_update`: a notification "<site> has new settings"; tapping it opens the claim (fetch, import
  * screen, confirm), exactly as an `adonis://claim` link. Pushed claims are remembered so that dismissing the
- * import screen tells the site ([wasPushed], [Claims.decline][org.linhome.claim.Claims.decline]).
+ * import screen tells the site ([wasPushed], [Claims.decline][org.linhome.claim.Claims.decline]), and with them
+ * the site's summary of what changed, which the import screen shows on top ([pushedSummary]).
  */
 object PollMessages {
     private const val CHANNEL_ID = "adonis_open_site_updates"
@@ -105,7 +106,7 @@ object PollMessages {
             when (val message = PollMessage.parse(json, host)) {
                 is PollMessage.ConfigUpdate -> {
                     Log.i("[PollMessages] $message")
-                    remember(context, message.claimUrl)
+                    remember(context, message.claimUrl, message.summary)
                     notifyConfigUpdate(context, message)
                 }
                 is PollMessage.ReceiveCalls -> {
@@ -126,21 +127,34 @@ object PollMessages {
     fun wasPushed(context: Context, claimUrl: String?): Boolean =
         claimUrl != null && context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet("pushed", emptySet())!!.contains(claimUrl)
 
+    /** What the site said changed in the pushed [claimUrl] (`config_update`'s summary), null when none or not pushed. */
+    fun pushedSummary(context: Context, claimUrl: String?): String? {
+        if (!wasPushed(context, claimUrl)) return null
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString("summary", null)?.takeIf { prefs.getString("summary_claim", null) == claimUrl && it.isNotBlank() }
+    }
+
     /** Done with [claimUrl] (applied or dismissed): forget it and clear the notification. */
     fun settled(context: Context, claimUrl: String?) {
         if (claimUrl == null) return
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val pushed = prefs.getStringSet("pushed", emptySet())!!.toMutableSet()
         if (pushed.remove(claimUrl)) {
-            prefs.edit().putStringSet("pushed", pushed).apply()
+            prefs.edit().putStringSet("pushed", pushed).remove("summary").remove("summary_claim").apply()
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
         }
     }
 
-    private fun remember(context: Context, claimUrl: String) {
+    private fun remember(context: Context, claimUrl: String, summary: String?) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         // Only the latest push matters; older ones were superseded by the site.
-        prefs.edit().putStringSet("pushed", setOf(claimUrl)).apply()
+        val editor = prefs.edit().putStringSet("pushed", setOf(claimUrl))
+        if (summary.isNullOrBlank()) {
+            editor.remove("summary").remove("summary_claim")
+        } else {
+            editor.putString("summary", summary).putString("summary_claim", claimUrl)
+        }
+        editor.apply()
     }
 
     /**
