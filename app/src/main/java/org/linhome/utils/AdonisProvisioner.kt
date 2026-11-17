@@ -48,7 +48,11 @@ data class AdonisActionConfig(
     val type: String = "action_type_open_door",
     val code: String = "#",
     /** null: sent to the door as the device's method; "site": no DTMF, the site runs it (see [Action.METHOD_SITE]). */
-    val method: String? = null
+    val method: String? = null,
+    /** A theme icon name (`garage`) instead of the type's; see [Action.icon]. */
+    val icon: String? = null,
+    /** The text under the button, "" for none; null: the type's name. See [Action.label]. */
+    val label: String? = null
 )
 
 data class AdonisDeviceConfig(
@@ -239,7 +243,9 @@ object AdonisProvisioner {
                                 val actType = actObj.optString("type", "action_type_open_door")
                                 val actCode = actObj.optString("code", "#")
                                 val actMethod = actObj.optString("method", "").trim().takeIf { it.isNotEmpty() }
-                                actionsList.add(AdonisActionConfig(actType, actCode, actMethod))
+                                val actIcon = Action.cleanIcon(actObj.optString("icon", ""))
+                                val actLabel = if (actObj.has("label") && !actObj.isNull("label")) actObj.optString("label").trim().take(40) else null
+                                actionsList.add(AdonisActionConfig(actType, actCode, actMethod, actIcon, actLabel))
                             }
                         }
                         if (actionsList.isEmpty()) {
@@ -328,7 +334,7 @@ object AdonisProvisioner {
     }
 
     private fun mapActions(actions: List<AdonisActionConfig>): List<Action> {
-        val mapped = actions.map { act -> Action(mapActionType(act.type), act.code, act.method) }
+        val mapped = actions.map { act -> Action(mapActionType(act.type), act.code, act.method, act.icon, act.label) }
         return mapped.ifEmpty { listOf(Action("action_open_door", "#")) }
     }
 

@@ -39,8 +39,18 @@ data class HistoryEvent(
         StorageManager.callsRecordingsDir,
         "${id}.jpg"
     ).absolutePath,
-    var hasVideo: Boolean = false
+    var hasVideo: Boolean = false,
+    /** How the call ended on this phone: a [org.linhome.webhooks.CallOutcome] wire name; null while it runs (or before 2.1). */
+    var result: String? = null,
+    /** Who took it when it was answered elsewhere, as the site said. */
+    var answeredBy: String? = null,
+    /** The icons of the buttons pressed on this phone during the call, in order (`icons/door`...). */
+    var actionIcons: List<String> = emptyList()
 ) : Parcelable {
+
+    /** A door button was pressed on this phone (the door was opened, most of the time). */
+    fun actionPressed(): Boolean = actionIcons.isNotEmpty()
+
 
     val media: File
         get() {

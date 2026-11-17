@@ -47,9 +47,6 @@ abstract class CallGenericActivity : GenericActivity() {
         window.navigationBarColor = Theme.getColor("color_j")
 
 
-        if (intent.getBooleanExtra("closeAppUponCallFinish", false)) {
-            coreContext.closeAppUponCallFinish = true
-        }
         call = intent.getStringExtra("callId")?.let { callId ->
             coreContext.core.calls.filter { it.callLog.callId.equals(callId) }.firstOrNull()
         }
@@ -61,7 +58,6 @@ abstract class CallGenericActivity : GenericActivity() {
         }
         if (call == null) {
             Log.w("[CallGenericActivity] No active call found, finishing")
-            coreContext.closeAppUponCallFinish = false
             finish()
         }
     }

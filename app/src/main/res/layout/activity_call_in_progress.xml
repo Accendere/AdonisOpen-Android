@@ -96,7 +96,7 @@
             android:layout_height="0dp"
             android:layout_below="@+id/chunk_call_name_address"
             app:layout_constraintTop_toBottomOf="@+id/chunk_call_name_address"
-            app:layout_constraintBottom_toTopOf="@+id/actions"
+            app:layout_constraintBottom_toTopOf="@+id/pad"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toRightOf="parent"
             app:layout_constraintDimensionRatio="H,4:3"
@@ -112,41 +112,17 @@
                 bind:incomingView="@{false}"/>
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/actions"
+        <!-- The door's first button large in the middle, the rest small (CallButtonPad). -->
+        <org.linhome.ui.call.CallButtonPad
+            android:id="@+id/pad"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_above="@+id/controls"
-            app:layout_constraintBottom_toTopOf="@+id/controls"
-            app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            android:gravity="center">
-
-            <include
-                layout="@layout/chunk_call_in_progress_actions"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="@{callmodel.actions.size() > 0 ? View.VISIBLE : View.GONE}"
-                bind:callmodel="@{callmodel}" />
-        </LinearLayout>
-
-
-        <LinearLayout
-            android:id="@+id/controls"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="20dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent"
-            app:layout_constraintRight_toRightOf="parent"
-            android:gravity="center">
-
-            <include
-                layout="@layout/chunk_call_in_progress_controls"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                bind:callmodel="@{callmodel}" />
-        </LinearLayout>
+            app:layout_constraintRight_toRightOf="parent" />
 
 
     </androidx.constraintlayout.widget.ConstraintLayout>

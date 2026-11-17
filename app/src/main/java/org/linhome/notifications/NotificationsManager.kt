@@ -185,7 +185,6 @@ class NotificationsManager(private val context: Context) {
                                 val hasVideo = call.remoteParams?.isVideoEnabled ?: true
                                 val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java).apply {
                                     putExtra("callId", call.callLog.callId)
-                                    putExtra("closeAppUponCallFinish", true)
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                 }
                                 val pendingIntent = PendingIntent.getActivity(
@@ -581,7 +580,6 @@ class NotificationsManager(private val context: Context) {
 
         val incomingCallNotificationIntent = Intent(context, CallIncomingActivity::class.java)
         incomingCallNotificationIntent.putExtra("callId", call.callLog.callId)
-        incomingCallNotificationIntent.putExtra("closeAppUponCallFinish",true)
         incomingCallNotificationIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pendingIntent = PendingIntent.getActivity(
             context,

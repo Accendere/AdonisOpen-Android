@@ -137,11 +137,9 @@ class MainActivity : GenericActivity() {
         binding.appbar.webhookRelinkBanner.setOnClickListener { openScanner() }
         Webhooks.status.observe(this) { updateWebhookRelinkBanner(it) }
 
-        LinhomeApplication.coreContext.closeAppUponCallFinish = false
         val isAdonisIntent = intent?.data?.scheme.equals("adonis", ignoreCase = true)
         var claimStarted = false
         if (isAdonisIntent) {
-            LinhomeApplication.coreContext.closeAppUponCallFinish = false
             intent?.data?.let { uri ->
                 claimStarted = handleAdonisUri(uri)
             }
@@ -169,7 +167,6 @@ class MainActivity : GenericActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent?.data?.scheme.equals("adonis", ignoreCase = true)) {
-            LinhomeApplication.coreContext.closeAppUponCallFinish = false
             intent?.data?.let { uri ->
                 handleAdonisUri(uri)
             }
@@ -415,6 +412,12 @@ class MainActivity : GenericActivity() {
             currentFragment.exitEdition()
             return
         }
+        if (navController.previousBackStackEntry == null) {
+            // Leaving from the root screen: send the task back instead of finishing, so Android shows
+            // the app that was in front before (reached from the task switcher, say), not the launcher.
+            moveTaskToBack(true)
+            return
+        }
         super.onBackPressed()
     }
 
@@ -553,14 +556,6 @@ class MainActivity : GenericActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (pendingAdonisConfig != null) {
-            LinhomeApplication.coreContext.closeAppUponCallFinish = false
-        }
-        if (LinhomeApplication.coreContext.closeAppUponCallFinish) {
-            LinhomeApplication.coreContext.closeAppUponCallFinish = false
-            finish()
-            return
-        }
         updateToolbarCallsToggle()
         showPendingAutoConfigDialogIfNeeded()
         org.linhome.pairing.Pairing.attach(this)

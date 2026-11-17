@@ -109,11 +109,11 @@ data class Device(
     ) {
         card.getExtendedPropertiesValuesByName(vcard_actions_list_header)?.forEach { action ->
             val actionCleaned = action.replace("\\;", "~").replace(";", "~")
-            val components = actionCleaned.split("~")
-            if (components.size !in 2..3) {
+            val parsed = Action.fromVcard(actionCleaned)
+            if (parsed == null) {
                 Log.e("Unable to create action from VCard $action")
             } else {
-                actions?.add(Action(components[0], components[1], components.getOrNull(2)?.takeIf { it.isNotBlank() }))
+                actions?.add(parsed)
             }
         }
     }
@@ -143,7 +143,6 @@ data class Device(
         if (LinhomeApplication.coreContext.core.callsNb > 0) {
             return
         }
-        LinhomeApplication.coreContext.closeAppUponCallFinish = false
         val params: CallParams? = LinhomeApplication.coreContext.core.createCallParams(null)
         type?.also {
             params?.isVideoEnabled = DeviceTypes.supportsVideo(it)

@@ -53,6 +53,7 @@ import org.linhome.compatibility.Compatibility
 import org.linhome.customisation.Texts
 import org.linhome.entities.Action
 import org.linhome.linphonecore.extensions.extendedAccept
+import org.linhome.linphonecore.extensions.historyEvent
 import org.linhome.linphonecore.extensions.extendedAcceptSilent
 import org.linhome.notifications.NotificationsManager
 import org.linhome.store.DeviceStore
@@ -96,7 +97,6 @@ class CoreContext(
 
     var stopped = false
     val core: Core
-    var closeAppUponCallFinish = false
     private var phoneStateListener: PhoneStateInterface? = null
 
     val appVersion: String by lazy {
@@ -175,6 +175,11 @@ class CoreContext(
 
     /** Reports an action button press (before or during the call). */
     fun reportDoorAction(call: Call, action: Action) {
+        call.callLog?.let { log ->
+            val event = log.historyEvent()
+            event.actionIcons = event.actionIcons + (action.iconName() ?: "icons/door")
+            event.persist()
+        }
         callReporter.onDoorAction(
             call.callLog?.callId, action.type, action.code,
             early = isCallSilentlyAccepted(call), sent = action.code != null, site = siteIdFor(call)
@@ -190,6 +195,27 @@ class CoreContext(
             Call.Status.DeclinedElsewhere -> org.linhome.webhooks.CallOutcome.DECLINED_ELSEWHERE
             Call.Status.Missed, Call.Status.Aborted, Call.Status.EarlyAborted -> org.linhome.webhooks.CallOutcome.MISSED
             else -> org.linhome.webhooks.CallOutcome.MISSED
+        }
+    }
+
+    /** Keeps how the call ended with its history entry (the gallery and History show it); any call, narrated or not. */
+    private fun recordCallResult(call: Call, state: Call.State) {
+        val log = call.callLog ?: return
+        if (log.callId == null) return
+        val outcome = outcomeOf(call, state).let {
+            if (it == org.linhome.webhooks.CallOutcome.ANSWERED && isCallSilentlyAccepted(call)) org.linhome.webhooks.CallOutcome.PREVIEWED else it
+        }
+        val event = log.historyEvent()
+        event.result = outcome.wireName
+        event.persist()
+    }
+
+    /** The site said who answered [callId] elsewhere: kept with its history entry. */
+    private fun recordAnsweredBy(callId: String, name: String?) {
+        if (name.isNullOrBlank()) return
+        org.linhome.store.HistoryEventStore.findHistoryEventByCallId(callId)?.let { event ->
+            event.answeredBy = name.trim().take(80)
+            event.persist()
         }
     }
 
@@ -216,6 +242,7 @@ class CoreContext(
             answeredByLookups[id] = lookup
             coroutineScope.launch {
                 val name = runCatching { lookup.await() }.getOrNull()
+                recordAnsweredBy(id, name)
                 callReporter.onEnded(id, outcome, known, name)
                 delay(30_000)
                 answeredByLookups.remove(id)
@@ -469,7 +496,10 @@ class CoreContext(
                     call.callLog?.callId?.let { endedWhileHeld += it }
                     Log.i("[Context] A call held for its site's answer ended before it was decided")
                 }
-                if (state != Call.State.Released) reportCallEnded(call, state)
+                if (state != Call.State.Released) {
+                    recordCallResult(call, state)
+                    reportCallEnded(call, state)
+                }
                 clearSilentlyAccepted(call)
                 if (core.callsNb == 0) {
                     if (isVibrating) {
@@ -909,7 +939,6 @@ class CoreContext(
     }
 
     private fun onOutgoingStarted(call: Call) {
-        closeAppUponCallFinish = false
         val intent = Intent(context, CallOutgoingActivity::class.java)
         intent.putExtra("callId", call.callLog.callId)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)

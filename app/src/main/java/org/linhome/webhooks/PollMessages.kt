@@ -44,7 +44,8 @@ sealed class PollMessage {
      * The site switched this phone's door calls for it (its card, an admin, a schedule): [enabled] for the site whose
      * poll brought it, [by] who did it (a name to show), [at] when (ISO 8601, as sent).
      */
-    data class ReceiveCalls(val id: String?, val enabled: Boolean, val by: String?, val at: String?) : PollMessage()
+    /** [self]: the person changed it themselves (on the card), so the phone says nothing. */
+    data class ReceiveCalls(val id: String?, val enabled: Boolean, val by: String?, val at: String?, val self: Boolean = false) : PollMessage()
 
     /** A type this app doesn't know, or a message it can't use: acknowledged and ignored. */
     data class Ignored(val id: String?, val why: String) : PollMessage()
@@ -73,7 +74,8 @@ sealed class PollMessage {
                     ReceiveCalls(
                         id, enabled,
                         json.optString("by", "").trim().ifEmpty { null }?.take(80),
-                        json.optString("at", "").trim().ifEmpty { null }
+                        json.optString("at", "").trim().ifEmpty { null },
+                        json.opt("self") == true
                     )
                 }
                 else -> Ignored(id, "unknown type '$type'")
@@ -114,7 +116,7 @@ object PollMessages {
                     val site = siteId?.let { Webhooks.applyReceiveCalls(it, message.enabled) }
                     if (site == null) {
                         Log.w("[PollMessages] receive_calls for an unknown site, ignored")
-                    } else {
+                    } else if (!message.self) {
                         notifyReceiveCalls(context, site.displayName, message)
                     }
                 }

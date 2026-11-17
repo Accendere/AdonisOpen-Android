@@ -74,6 +74,16 @@ class CallIncomingActivity : CallGenericActivity() {
             callViewModel =
                 ViewModelProvider(this, CallViewModelFactory(activeCall))[CallViewModel::class.java]
             binding.callmodel = callViewModel
+            val (hero, extras) = CallButtonPad.split(callViewModel.actions)
+            binding.pad.show(
+                hero, { callViewModel.performAction(it) },
+                CallButtonPad.Control("icons/phone", null, "accept_call_button", false, Texts.get("call_button_accept")) { callViewModel.extendedAccept() },
+                CallButtonPad.Control("icons/decline", null, "decline_call_button", false, Texts.get("call_button_decline")) { callViewModel.decline() },
+                extras.map { action ->
+                    CallButtonPad.Control(action.iconName() ?: "icons/door", action.actionText(), "incall_call_button", true,
+                        action.actionText() ?: action.typeName() ?: "") { callViewModel.performAction(action) }
+                }
+            )
 
             callViewModel.actionFeedbackState.observe(this, Observer { state ->
                 when (state) {
@@ -165,7 +175,7 @@ class CallIncomingActivity : CallGenericActivity() {
                 binding.chunkCallVideoOrIcon.updateLayoutParams<ConstraintLayout.LayoutParams> {
                     dimensionRatio = "H,${size.width}:${size.height}"
                     val deviceHasButtons = callViewModel.actions.isNotEmpty()
-                    matchConstraintPercentWidth = computePercentageWidth(size, if (deviceHasButtons) 300 else 250) // Space for buttons and header
+                    matchConstraintPercentWidth = computePercentageWidth(size, if (deviceHasButtons) 400 else 250) // Space for buttons and header
                 }
             })
         }
@@ -176,8 +186,7 @@ class CallIncomingActivity : CallGenericActivity() {
     private fun showAnsweredElsewhereAndFinish(bannerText: String) {
         showingAnsweredElsewhere = true
         binding.silentTimerContainer.visibility = View.GONE
-        binding.actions.visibility = View.INVISIBLE
-        binding.buttons.visibility = View.INVISIBLE
+        binding.pad.visibility = View.INVISIBLE
         binding.answeredElsewhereText.text = bannerText
         binding.answeredElsewhereCard.visibility = View.VISIBLE
         val callId = callViewModel.call.callLog?.callId

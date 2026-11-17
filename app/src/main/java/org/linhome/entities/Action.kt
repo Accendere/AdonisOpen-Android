@@ -23,6 +23,8 @@ package org.linhome.entities
 import android.os.Parcelable
 import kotlinx.android.parcel.Parcelize
 import org.linhome.customisation.ActionTypes
+import java.net.URLDecoder
+import java.net.URLEncoder
 
 /**
  * One button of a device: its [type] (a section of action_types.xml) and its [code].
@@ -31,18 +33,52 @@ import org.linhome.customisation.ActionTypes
  * device: the press only goes to the site as the `door_action` webhook, and Adonis runs the action there (a garage,
  * run by a DeviceAction row matching the code). Stored in the vCard as `type~code~site`.
  */
+/**
+ * A door button. [icon]: an image of the theme's `icons/` (`garage`, `light`...) instead of the type's own;
+ * [label]: the text under it instead of the type's name, "" for none (icon only). Both come from the site's link.
+ */
 @Parcelize
-data class Action(val type: String?, val code: String?, val method: String? = null) : Parcelable {
+data class Action(
+    val type: String?,
+    val code: String?,
+    val method: String? = null,
+    val icon: String? = null,
+    val label: String? = null
+) : Parcelable {
 
     companion object {
         const val METHOD_SITE = "site"
+
+        /** Accepts an icon name only as a plain theme icon (`garage`, `icons/garage`), never a path elsewhere. */
+        fun cleanIcon(icon: String?): String? =
+            icon?.trim()?.removePrefix("icons/")?.takeIf { it.matches(Regex("[a-z0-9_]{1,40}")) }
+
+        /** Reads [vcardValue] back (`;` already turned into `~`); null when it isn't one. */
+        fun fromVcard(value: String): Action? {
+            val c = value.split("~")
+            if (c.size < 2 || c.size > 5) return null
+            return Action(
+                c[0], c[1],
+                c.getOrNull(2)?.takeIf { it.isNotBlank() },
+                cleanIcon(c.getOrNull(3)?.takeIf { it.isNotBlank() }),
+                c.getOrNull(4)?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() }
+            )
+        }
     }
 
     /** Run by the site (Adonis), not the door: no DTMF. */
     fun isSite(): Boolean = method == METHOD_SITE
 
-    /** The vCard value: `type~code`, plus `~method` when there is one. */
-    fun vcardValue(): String = listOfNotNull(type, code, method).joinToString("~")
+    /**
+     * The vCard value: `type~code`, plus `~method` when there is one; with an icon or a label,
+     * `type~code~method~icon[~label]` (empty fields kept for position, the label URL-encoded).
+     */
+    fun vcardValue(): String {
+        if (icon == null && label == null) return listOfNotNull(type, code, method).joinToString("~")
+        val fields = mutableListOf(type ?: "", code ?: "", method ?: "", icon ?: "")
+        label?.let { fields.add(URLEncoder.encode(it, "UTF-8")) }
+        return fields.joinToString("~")
+    }
 
     fun typeName(): String? {
         return type?.let {
@@ -51,12 +87,15 @@ data class Action(val type: String?, val code: String?, val method: String? = nu
     }
 
     fun iconName(): String? {
+        icon?.let { return "icons/$it" }
         return type?.let {
             ActionTypes.iconNameForActionType(it)
         }
     }
 
+    /** The text under the button: the site's label, else the type's name; null for none. */
     fun actionText(): String? {
+        label?.let { return it.trim().ifEmpty { null } }
         return type?.let {
             ActionTypes.typeNameForActionType(it)
         }

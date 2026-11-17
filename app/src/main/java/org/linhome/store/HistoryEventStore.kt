@@ -59,7 +59,10 @@ object HistoryEventStore {
                     historyEventsConfig.getBool(it, "viewed_by_user", false),
                     mediaFile,
                     thumbFile,
-                    historyEventsConfig.getBool(it, "has_video", false)
+                    historyEventsConfig.getBool(it, "has_video", false),
+                    historyEventsConfig.getString(it, "result", null),
+                    historyEventsConfig.getString(it, "answered_by", null),
+                    historyEventsConfig.getString(it, "action_icons", null)?.split(",")?.filter { icon -> icon.isNotBlank() } ?: emptyList()
                 )
             }
         }
@@ -86,6 +89,11 @@ object HistoryEventStore {
             )
             historyEventsConfig.setString(entry.value.id, "call_id", entry.value.callId)
             historyEventsConfig.setBool(entry.value.id, "has_video", entry.value.hasVideo)
+            entry.value.result?.let { historyEventsConfig.setString(entry.value.id, "result", it) }
+            entry.value.answeredBy?.let { historyEventsConfig.setString(entry.value.id, "answered_by", it) }
+            if (entry.value.actionIcons.isNotEmpty()) {
+                historyEventsConfig.setString(entry.value.id, "action_icons", entry.value.actionIcons.joinToString(","))
+            }
         }
         historyEventsXml.writeText(historyEventsConfig.dumpAsXml())
     }

@@ -147,6 +147,14 @@ class ReceiveCallsTest {
     }
 
     @Test
+    fun selfIsOnlyARealTrue() {
+        assertFalse((PollMessage.parse(receiveCalls("m_1", true), "s") as PollMessage.ReceiveCalls).self)
+        assertTrue((PollMessage.parse(receiveCalls("m_2", true).put("self", true), "s") as PollMessage.ReceiveCalls).self)
+        assertFalse((PollMessage.parse(receiveCalls("m_3", true).put("self", "true"), "s") as PollMessage.ReceiveCalls).self)
+        assertFalse((PollMessage.parse(receiveCalls("m_4", true).put("self", false), "s") as PollMessage.ReceiveCalls).self)
+    }
+
+    @Test
     fun receiveCallsWithoutARealBooleanIsIgnored() {
         assertTrue(PollMessage.parse(JSONObject("""{"id":"m","type":"receive_calls"}"""), "s") is PollMessage.Ignored)
         assertTrue(PollMessage.parse(JSONObject("""{"id":"m","type":"receive_calls","enabled":"true"}"""), "s") is PollMessage.Ignored)

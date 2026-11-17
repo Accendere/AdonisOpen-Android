@@ -66,6 +66,7 @@
                         android:layout_height="match_parent"
                         android:layout_alignParentStart="true"
                         glidewith ='@{model.historyEvent.mediaThumbnail}'
+                        galleryFor='@{model}'
                         android:visibility='@{model.historyEvent.hasMedia() &amp;&amp; model.historyEvent.hasMediaThumbnail() ? View.VISIBLE : View.GONE, default="gone"}'
                         android:scaleType="centerCrop"/>
 
@@ -97,6 +98,17 @@
                         android:layout_centerInParent="true"
                         android:visibility='@{model.historyEvent.hasMedia() ? View.VISIBLE : View.GONE, default="visible"}'
                         />
+
+                    <!-- How the call ended (CallResultBadges): the pressed button, who took it elsewhere, missed. -->
+                    <LinearLayout
+                        android:id="@+id/result_badges"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_alignParentEnd="true"
+                        android:layout_alignParentBottom="true"
+                        android:layout_margin="4dp"
+                        android:orientation="horizontal"
+                        callResult="@{model.historyEvent}" />
                 </RelativeLayout>
 
                 <RelativeLayout

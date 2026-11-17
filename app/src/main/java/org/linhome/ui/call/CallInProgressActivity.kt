@@ -35,6 +35,7 @@ import androidx.lifecycle.ViewModelProvider
 import org.linhome.LinhomeApplication.Companion.coreContext
 import org.linhome.R
 import org.linhome.compatibility.Compatibility
+import org.linhome.customisation.Texts
 import org.linhome.databinding.ActivityCallInProgressBinding
 import org.linhome.utils.DialogUtil
 import org.linhome.utils.extensions.forceVisible
@@ -69,6 +70,20 @@ class CallInProgressActivity : CallGenericActivity() {
             callViewModel =
                 ViewModelProvider(this, CallViewModelFactory(it))[CallViewModel::class.java]
             binding.callmodel = callViewModel
+            val (hero, extras) = CallButtonPad.split(callViewModel.actions)
+            val mute = CallButtonPad.Control("icons/mic", null, "incall_call_button", true, Texts.get("call_button_mute")) { callViewModel.toggleMute() }
+            val speaker = CallButtonPad.Control("icons/speaker", null, "incall_call_button", true, Texts.get("call_button_disable_speaker")) { callViewModel.toggleSpeaker() }
+            binding.pad.show(
+                hero, { callViewModel.performAction(it) },
+                mute,
+                CallButtonPad.Control("icons/decline", null, "decline_call_button", false, Texts.get("call_button_hangup")) { callViewModel.terminate() },
+                listOf(speaker) + extras.map { action ->
+                    CallButtonPad.Control(action.iconName() ?: "icons/door", action.actionText(), "incall_call_button", true,
+                        action.actionText() ?: action.typeName() ?: "") { callViewModel.performAction(action) }
+                }
+            )
+            callViewModel.microphoneMuted.observe(this) { mute.setOff(it == true) }
+            callViewModel.speakerDisabled.observe(this) { speaker.setOff(it == true) }
             binding.callTimer.base = SystemClock.elapsedRealtime() - (1000 * it.duration)
             binding.callTimer.start()
             callViewModel.callState.observe(this, Observer { callState ->
@@ -86,8 +101,7 @@ class CallInProgressActivity : CallGenericActivity() {
                 callViewModel.toggleVideoFullScreen()
             }
             callViewModel.videoFullScreen.observe(this, Observer { full ->
-                binding.actions.forceVisible()
-                binding.controls?.forceVisible()
+                binding.pad.forceVisible()
                 binding.timer.forceVisible()
                 coreContext.core.nativeVideoWindowId =
                     if (callViewModel.videoFullScreen.value!!) binding.videofullscreen else binding.chunkCallDeviceIconOrVideo?.videocollapsed
@@ -96,7 +110,7 @@ class CallInProgressActivity : CallGenericActivity() {
                 binding.chunkCallVideoOrIcon.updateLayoutParams<ConstraintLayout.LayoutParams> {
                     dimensionRatio = "H,${size.width}:${size.height}"
                     val deviceHasButtons = callViewModel.actions.isNotEmpty()
-                    matchConstraintPercentWidth = computePercentageWidth(size,if (deviceHasButtons) 300 else 200) //  200 left for buttons and header if no actions, 300 otherwise
+                    matchConstraintPercentWidth = computePercentageWidth(size,if (deviceHasButtons) 380 else 200) //  200 left for buttons and header if no actions, 300 otherwise
                 }
             })
             callViewModel.videoContent.observe(this, {

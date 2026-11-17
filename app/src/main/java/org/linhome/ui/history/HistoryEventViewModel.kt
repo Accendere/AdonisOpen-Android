@@ -95,11 +95,13 @@ class HistoryEventViewModel(
                     "history_list_call_type_called"
             }
         }
-        return Texts.get(
+        val text = Texts.get(
             "history_list_call_date_type",
             Texts.get(typeText),
             callTime
         )
+        // Taken elsewhere: by whom, as the site said.
+        return CallResultBadges.elsewhereName(historyEvent)?.let { "$text · $it" } ?: text
     }
 
     fun dayText(): String {
