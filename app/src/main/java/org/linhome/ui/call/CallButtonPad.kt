@@ -116,8 +116,8 @@ class CallButtonPad @JvmOverloads constructor(
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(accent)
-                // The halo: room around the button, so it reads as the one to press.
-                setStroke(dp(10), ColorUtils.setAlphaComponent(accent, 70))
+                // A thin halo, so it reads as the one to press.
+                setStroke(dp(4), ColorUtils.setAlphaComponent(accent, 70))
             }
             isClickable = true
             isFocusable = true
@@ -130,15 +130,16 @@ class CallButtonPad @JvmOverloads constructor(
             imageTintList = Theme.buildSingleColorStateList("color_c")
             action.iconName()?.let { Theme.setIcon(it, this) }
         }
-        circle.addView(icon, FrameLayout.LayoutParams(dp(58), dp(58), Gravity.CENTER))
+        circle.addView(icon, FrameLayout.LayoutParams(dp(36), dp(36), Gravity.CENTER))
         val column = LinearLayout(context).apply {
             orientation = VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(8), dp(4), dp(8), 0)
         }
-        column.addView(circle, LayoutParams(dp(128), dp(128)))
+        // A bit larger than the small buttons (56dp).
+        column.addView(circle, LayoutParams(dp(76), dp(76)))
         action.actionText()?.let { text ->
-            column.addView(label(text, 15f), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
+            column.addView(label(text, 13f), LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply { topMargin = dp(4) })
         }
         return column
     }

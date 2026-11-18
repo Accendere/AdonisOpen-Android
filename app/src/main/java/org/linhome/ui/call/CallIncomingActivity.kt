@@ -55,7 +55,11 @@ class CallIncomingActivity : CallGenericActivity() {
 
         Compatibility.setShowWhenLocked(this, true)
         Compatibility.setTurnScreenOn(this, true)
-        Compatibility.requestDismissKeyguard(this)
+        // A call that woke the phone shows over the lock screen without unlocking it, so the phone is back to its
+        // locked, dark state when the call ends; cancelling the auto-close timer unlocks it (below).
+        if (!coreContext.callWokeScreen(call)) {
+            Compatibility.requestDismissKeyguard(this)
+        }
 
         binding = DataBindingUtil.setContentView(
             this,
@@ -126,6 +130,11 @@ class CallIncomingActivity : CallGenericActivity() {
 
             binding.silentTimerContainer.setOnClickListener {
                 coreContext.cancelSilentAcceptTimer(activeCall)
+                // Interest in the phone: it stays on, unlocked, once the call ends.
+                if (coreContext.callWokeScreen(activeCall)) {
+                    coreContext.screenTakenOver(activeCall)
+                    Compatibility.requestDismissKeyguard(this)
+                }
                 binding.silentTimerContainer.visibility = View.GONE
                 DialogUtil.toast("timer_cancelled_preview_active")
             }

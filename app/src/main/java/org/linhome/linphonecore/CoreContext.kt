@@ -126,6 +126,27 @@ class CoreContext(
     val silentAcceptRemainingMs = MutableLiveData<Long>(0L)
     val lastCallStateMessage = HashMap<String, String>()
 
+    /**
+     * Calls that rang with the screen off. Their call screen shows over the lock screen without unlocking it, so the
+     * phone is back on its lock screen when the call ends and goes dark on the lock screen's own short timeout, as if
+     * the call never happened. Taking the phone over (cancelling the auto-close timer) unlocks it: [screenTakenOver].
+     */
+    private val screenWakingCallIds = HashSet<String>()
+    private var incomingWakeLock: PowerManager.WakeLock? = null
+
+    /** True when [call] rang with the screen off and nobody took the phone over since. */
+    fun callWokeScreen(call: Call?): Boolean = call?.callLog?.callId?.let { screenWakingCallIds.contains(it) } == true
+
+    /** The user showed interest in the phone during [call]: leave it on (and unlocked) when the call ends. */
+    fun screenTakenOver(call: Call) {
+        call.callLog?.callId?.let { if (screenWakingCallIds.remove(it)) Log.i("[Context] Phone taken over during call [$it], it stays on") }
+    }
+
+    private fun releaseIncomingWakeLock() {
+        incomingWakeLock?.let { if (it.isHeld) it.release() }
+        incomingWakeLock = null
+    }
+
     /** Narrates incoming calls as webhook events, to the calling door's site only (only what it listed leaves the phone). */
     val callReporter = org.linhome.webhooks.CallReporter({ site, event, fields, at -> org.linhome.webhooks.Webhooks.sendCallEvent(site, event, fields, at) })
     /** The registration is the phone's, not a site's: every site hears it. */
@@ -501,6 +522,9 @@ class CoreContext(
                     reportCallEnded(call, state)
                 }
                 clearSilentlyAccepted(call)
+                call.callLog?.callId?.let { id ->
+                    if (screenWakingCallIds.remove(id)) Log.i("[Context] Call [$id] woke the screen: back to the lock screen")
+                }
                 if (core.callsNb == 0) {
                     if (isVibrating) {
                         Log.i("[Context] Stopping vibration")
@@ -511,6 +535,8 @@ class CoreContext(
                     }
 
                     removeCallOverlay()
+                    // Don't hold the screen on past the call (the lock screen's own timeout turns it off).
+                    releaseIncomingWakeLock()
                     // End/Error, not Released: Released only comes once the Call object is freed, which can be much later.
                     if (state != Call.State.Released) {
                         // Back from the call types to special use (no call = no microphone or camera type).
@@ -538,6 +564,11 @@ class CoreContext(
     private fun onIncomingCall(core: Core, call: Call) {
         val doorSite = DeviceStore.findDeviceByAddress(call.remoteAddress)?.let { org.linhome.webhooks.Webhooks.siteForDoor(it.address) }
         val callId = call.callLog?.callId
+        // Before anything (the notification's full-screen intent) can turn the screen on.
+        if (callId != null && !(context.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive) {
+            screenWakingCallIds += callId
+            Log.i("[Context] Call [$callId] rings with the screen off")
+        }
         when (val look = incomingGate.firstLook(doorSite)) {
             is org.linhome.sites.IncomingGate.FirstLook.Decided -> onIncomingDecided(core, call, look.decision, doorSite?.id, held = false)
             is org.linhome.sites.IncomingGate.FirstLook.AskSite -> {
@@ -627,12 +658,14 @@ class CoreContext(
             // Do NOT call onIncomingReceived() here — on Android 16+ direct startActivity
             // from background creates an invisible activity (BAL_BLOCK) that conflicts
             // with the notification's full-screen intent launch.
+            releaseIncomingWakeLock()
             @Suppress("DEPRECATION")
             val wakeLock = powerManager.newWakeLock(
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
                 "linhome:incoming_call"
             )
             wakeLock.acquire(10000)
+            incomingWakeLock = wakeLock
             Log.i("[Context] Screen was off, acquired wake lock for incoming call")
         } else if (Version.sdkStrictlyBelow(Version.API24_NOUGAT_70) || LinhomeApplication.someActivityRunning) {
             onIncomingReceived(call)
