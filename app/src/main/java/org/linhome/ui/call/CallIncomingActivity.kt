@@ -21,7 +21,12 @@
 
 package org.linhome.ui.call
 
+import android.graphics.Typeface
 import android.os.Bundle
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
 import android.view.View
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.updateLayoutParams
@@ -208,16 +213,32 @@ class CallIncomingActivity : CallGenericActivity() {
             if (lookup != null) {
                 val name = withTimeoutOrNull(4500) { runCatching { lookup.await() }.getOrNull() }
                 if (!name.isNullOrBlank() && !isFinishing) {
-                    binding.answeredElsewhereText.text = Texts.get("call_answered_elsewhere_by_banner", name)
+                    binding.answeredElsewhereText.text = answeredBy(name)
                     named = true
                 }
             }
             val elapsed = System.currentTimeMillis() - shownAt
-            delay(if (named) maxOf(3500 - elapsed, 2500) else (3500 - elapsed).coerceAtLeast(0))
+            // A name stays two seconds longer, to be read.
+            delay(if (named) maxOf(5500 - elapsed, 4500) else (3500 - elapsed).coerceAtLeast(0))
             if (!isFinishing) {
                 finish()
             }
         }
+    }
+
+    /** "Call was answered by" and, on a line of its own, the name: bold and a little larger. */
+    private fun answeredBy(name: String): CharSequence {
+        val text = Texts.get("call_answered_elsewhere_by_banner", name)
+        val at = text.lastIndexOf(name)
+        if (at < 0) return text
+        val head = text.substring(0, at).trimEnd()
+        val out = SpannableStringBuilder(head)
+        if (head.isNotEmpty()) out.append('\n')
+        val start = out.length
+        out.append(name)
+        out.setSpan(StyleSpan(Typeface.BOLD), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        out.setSpan(RelativeSizeSpan(1.2f), start, out.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return out.append(text.substring(at + name.length).trimEnd())
     }
 
     override fun onResume() {
