@@ -281,6 +281,13 @@ object Webhooks {
     /** See [WebhookEngine.whoAnswered]; asked of [siteId] only. */
     suspend fun whoAnswered(siteId: String?, callId: String?, door: String?): String? = hub?.whoAnswered(siteId, callId, door)
 
+    /** Whether [siteId]'s door rings now; with [snapshot], its camera picture too. Null when the site can't say. */
+    suspend fun ring(siteId: String?, snapshot: Boolean): RingStatus? =
+        hub?.ring(siteId, snapshot) { android.util.Base64.decode(it, android.util.Base64.DEFAULT) }
+
+    /** Opens [siteId]'s ringing door and stops every phone ringing. Null when the site couldn't be asked. */
+    suspend fun ringOpen(siteId: String?): RingOpenResult? = hub?.ringOpen(siteId)
+
     /** Which site a link is for (see [org.linhome.sites.SiteRegistry.resolveLink]). */
     fun resolveLink(siteId: String?, webhook: WebhookConfig?, linkHasSip: Boolean): LinkSite =
         hub?.resolveLink(siteId, webhook, linkHasSip)

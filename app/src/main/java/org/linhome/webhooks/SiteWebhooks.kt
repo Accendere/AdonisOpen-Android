@@ -137,6 +137,13 @@ class SiteWebhooks(
     suspend fun whoAnswered(siteId: String?, callId: String?, door: String?): String? =
         engineFor(siteId)?.whoAnswered(callId, door)
 
+    /** Whether [siteId]'s door rings now (see [WebhookEngine.ring]). */
+    suspend fun ring(siteId: String?, snapshot: Boolean, decodeBase64: (String) -> ByteArray?): RingStatus? =
+        engineFor(siteId)?.ring(snapshot, decodeBase64 = decodeBase64)
+
+    /** Opens [siteId]'s ringing door and silences the phones (see [WebhookEngine.ringOpen]). */
+    suspend fun ringOpen(siteId: String?): RingOpenResult? = engineFor(siteId)?.ringOpen()
+
     /** Which site [config]'s link is for (see [SiteRegistry.resolveLink]). */
     fun resolveLink(siteId: String?, webhook: WebhookConfig?, linkHasSip: Boolean): LinkSite =
         registry.resolveLink(siteId, webhook?.baseUrl, linkHasSip) { config(it.id)?.baseUrl }

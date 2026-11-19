@@ -25,6 +25,18 @@
             android:layout_marginEnd="16dp"
             android:layout_marginTop="12dp" />
 
+        <!-- "Check ongoing call": a door of a site is ringing, but not on this phone (RingCheckActivity). -->
+        <Button
+            android:id="@+id/ring_check_button"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_marginTop="12dp"
+            android:textAllCaps="false"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
         <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
             android:id="@+id/swiperefresh"
             android:layout_width="match_parent"

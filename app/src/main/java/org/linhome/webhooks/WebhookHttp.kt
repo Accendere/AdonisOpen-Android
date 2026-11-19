@@ -135,6 +135,16 @@ object WebhookProtocol {
         return WebhookRequest(config.urlFor(WebhookEvents.WHO_ANSWERED), body.toString(), headers)
     }
 
+    /** `ring`: is the site's door ringing now; with [snapshot], the camera's picture too (see [RingStatus]). */
+    fun ringRequest(config: WebhookConfig, snapshot: Boolean, meta: WebhookMeta): WebhookRequest {
+        val body = commonBody(config, meta).put("snapshot", snapshot)
+        return WebhookRequest(config.urlFor(WebhookEvents.RING), body.toString(), headers(config))
+    }
+
+    /** `ring_open`: open the ringing door and stop every phone ringing. */
+    fun ringOpenRequest(config: WebhookConfig, meta: WebhookMeta): WebhookRequest =
+        WebhookRequest(config.urlFor(WebhookEvents.RING_OPEN), commonBody(config, meta).toString(), headers(config))
+
     fun classify(answer: HttpAnswer): WebhookOutcome {
         val json = answer.body?.let { runCatching { JSONObject(it) }.getOrNull() }
         val code = json?.optString("code")?.ifEmpty { null }

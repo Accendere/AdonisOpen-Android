@@ -41,6 +41,17 @@ import org.linhome.linphonecore.RegistrationMonitor
 import org.linhome.store.DeviceStore
 import org.linhome.utils.DialogUtil
 import org.linphone.mediastream.Log
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import org.linhome.customisation.Texts
+import org.linhome.customisation.Theme
+import org.linhome.ui.ringcheck.RingCheckActivity
 
 /** The Doors tab: the account card, then the doors with a "+" under the last one. */
 class DevicesFragment : GenericFragment() {
@@ -134,8 +145,94 @@ class DevicesFragment : GenericFragment() {
         return binding.root
     }
 
+    /** Asks the sites, while this screen is on, whether a door rings that this phone isn't ringing for. */
+    private val ringScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var ringWatch: Job? = null
+
+    /** The site whose ringing door the button opens, while it shows. */
+    private var ringingSite: String? = null
+    private var ringingDoor: String? = null
+
+    /** The site of the ongoing call the person opened (the button may be gone when they come back). */
+    private var checkedSite: String? = null
+
+    private val ringCheck = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        // Back from the ongoing call: a phone still paused reminds the person with a shake of its switch.
+        if (!LinhomeApplication.corePreferences.appEnabled || checkedSite?.let { id -> org.linhome.webhooks.Webhooks.siteList().firstOrNull { it.id == id }?.callsEnabled == false } == true) {
+            mainactivity.shakeCallsToggle()
+        }
+    }
+
+    private fun startRingWatch() {
+        ringWatch?.cancel()
+        ringWatch = ringScope.launch {
+            while (isActive) {
+                checkRings()
+                delay(RING_WATCH_MS)
+            }
+        }
+    }
+
+    private suspend fun checkRings() {
+        if (LinhomeApplication.coreContext.core.callsNb > 0) {
+            showRingCheck(null, null)
+            return
+        }
+        for (site in org.linhome.webhooks.Webhooks.siteList()) {
+            val ring = org.linhome.webhooks.Webhooks.ring(site.id, snapshot = false) ?: continue
+            if (ring.ringing) {
+                showRingCheck(site.id, appDoorName(site.id) ?: ring.door)
+                return
+            }
+        }
+        showRingCheck(null, null)
+    }
+
+    /** The app's name for the site's door, when the site has exactly one here. */
+    private fun appDoorName(siteId: String): String? =
+        DeviceStore.devices.filter { org.linhome.webhooks.Webhooks.siteForDoor(it.address)?.id == siteId }.singleOrNull()?.name
+
+    private fun showRingCheck(siteId: String?, door: String?) {
+        if (!isAdded) return
+        ringingSite = siteId
+        ringingDoor = door
+        val button = binding.ringCheckButton ?: return
+        if (siteId == null) {
+            button.visibility = View.GONE
+            return
+        }
+        val density = resources.displayMetrics.density
+        button.text = door?.let { Texts.get("ring_check_button", it) } ?: Texts.get("ring_check_button_unknown")
+        button.setTextColor(Theme.getColor("color_c"))
+        button.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 26f * density
+            setColor(Theme.getColor("color_a"))
+        }
+        button.setOnClickListener {
+            checkedSite = ringingSite
+            ringCheck.launch(RingCheckActivity.intent(requireContext(), ringingSite, ringingDoor))
+        }
+        button.visibility = View.VISIBLE
+    }
+
+    override fun onPause() {
+        ringWatch?.cancel()
+        super.onPause()
+    }
+
+    override fun onDestroyView() {
+        ringWatch?.cancel()
+        super.onDestroyView()
+    }
+
+    companion object {
+        /** How often the Doors screen asks the sites whether a door rings. */
+        const val RING_WATCH_MS = 5_000L
+    }
+
     override fun onResume() {
         super.onResume()
+        startRingWatch()
         devicesViewModel.devices.value = DeviceStore.devices
         devicesAdapter.notifyDataSetChanged()
         footer.empty = DeviceStore.devices.isEmpty()

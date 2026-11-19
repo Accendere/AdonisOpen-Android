@@ -113,6 +113,15 @@ class WebhookEngine(
         /** How long a call for a paused site waits for that site's poll before it is declined anyway. */
         const val CALL_TIME_POLL_TIMEOUT_MS = 2_500L
 
+        /** How long `ring` may take (the picture included); the Doors screen asks again a few seconds later anyway. */
+        const val RING_TIMEOUT_MS = 4_000L
+
+        /** How long `ring_open` may take: the site opens the door and hangs up the intercom's calls. */
+        const val RING_OPEN_TIMEOUT_MS = 8_000L
+
+        /** A site that answered `ring` with 404/400 (an Adonis without it) is not asked again for this long. */
+        const val RING_UNSUPPORTED_BACKOFF_MS = 10 * 60_000L
+
         /** The `cause` of a state change that applies the site's own `receive_calls`. */
         const val CAUSE_SITE = "site"
     }
@@ -368,6 +377,40 @@ class WebhookEngine(
                 info("who_answered: ${outcome.javaClass.simpleName}")
                 null
             }
+        }
+    }
+
+    /** Until when (epoch ms) this site is not asked `ring` again: it answered 404/400 (an Adonis without it). */
+    private var ringUnsupportedUntilMs = 0L
+
+    /**
+     * Asks the site whether its door is ringing now (`ring`); with [snapshot], for the camera's picture too. Null
+     * when the site can't be asked or didn't answer in [timeoutMs]. Never changes the webhook status: a site
+     * without `ring` (404, 400) is left alone for [RING_UNSUPPORTED_BACKOFF_MS].
+     */
+    suspend fun ring(snapshot: Boolean, timeoutMs: Long = RING_TIMEOUT_MS, decodeBase64: (String) -> ByteArray?): RingStatus? {
+        val body = ringCall(timeoutMs) { config -> WebhookProtocol.ringRequest(config, snapshot, meta()) } ?: return null
+        return RingStatus.parse(body, decodeBase64)
+    }
+
+    /** Opens the ringing door and silences the phones (`ring_open`). Null when the site couldn't be asked. */
+    suspend fun ringOpen(timeoutMs: Long = RING_OPEN_TIMEOUT_MS): RingOpenResult? =
+        RingOpenResult.parse(ringCall(timeoutMs) { config -> WebhookProtocol.ringOpenRequest(config, meta()) })
+
+    private suspend fun ringCall(timeoutMs: Long, request: (WebhookConfig) -> WebhookRequest): JSONObject? {
+        val config = storage.config ?: return null
+        if (storage.status != WebhookStatus.ACTIVE || System.currentTimeMillis() < ringUnsupportedUntilMs) return null
+        val outcome = withTimeoutOrNull(timeoutMs) {
+            withContext(ioDispatcher) { WebhookProtocol.call(transport, request(config)) }
+        } ?: return null
+        return when (outcome) {
+            is WebhookOutcome.Ok -> outcome.body
+            WebhookOutcome.NotFound, is WebhookOutcome.AppBug -> {
+                info("ring: this site doesn't answer it (${outcome.javaClass.simpleName}); not asking again for a while")
+                ringUnsupportedUntilMs = System.currentTimeMillis() + RING_UNSUPPORTED_BACKOFF_MS
+                null
+            }
+            else -> null
         }
     }
 

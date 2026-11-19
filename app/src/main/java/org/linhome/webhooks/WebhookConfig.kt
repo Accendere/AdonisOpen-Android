@@ -89,6 +89,14 @@ object WebhookEvents {
      */
     const val SETTINGS = "webhook_settings"
 
+    /**
+     * Not events the site lists: the Doors screen's "check ongoing call", for a phone the door isn't calling. `ring`
+     * asks whether the site's door rings (and for its camera picture), `ring_open` opens it and silences the phones.
+     * Asked outside the queue; an older Adonis answers 404 and the app stops asking that site for a while.
+     */
+    const val RING = "ring"
+    const val RING_OPEN = "ring_open"
+
     /** The events the person can switch on or off in Settings, in the order shown. */
     val EDITABLE = listOf(
         DOOR_ACTION, CALL_RINGING, CALL_PREVIEW, CALL_ANSWERED, CALL_DECLINED, CALL_ENDED, CALL_SUMMARY,

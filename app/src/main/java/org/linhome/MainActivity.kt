@@ -349,6 +349,21 @@ class MainActivity : GenericActivity() {
             Texts.get(if (enabled) "toolbar_calls_toggle_desc_active" else "toolbar_calls_toggle_desc_paused")
     }
 
+    /**
+     * Shakes the calls switch without changing it: a reminder that the phone is paused, after the person checked a
+     * call that didn't ring here. The meals card's shake on a blocked meal: two quick left-right shifts of 4dp, 0.4 s.
+     */
+    fun shakeCallsToggle() {
+        val toggle = binding.appbar.toolbarCallsToggle
+        if (toggle.visibility != View.VISIBLE) return
+        val shift = 4f * resources.displayMetrics.density
+        android.animation.ObjectAnimator.ofFloat(toggle, View.TRANSLATION_X, 0f, -shift, shift, -shift, shift, 0f).apply {
+            duration = 400
+            interpolator = android.view.animation.AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
     private fun updateWebhookRelinkBanner(status: WebhookStatus?) {
         val banner = binding.appbar.webhookRelinkBanner
         if (status != WebhookStatus.UNAUTHORIZED) {
