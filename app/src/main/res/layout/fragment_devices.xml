@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Doors tab: the account card on top, then the doors, with a "+" under the last one
-     (or a larger "Add a door" when there are none). -->
+<!-- The Doors tab: the account card on top, then the doors (a short "no doors yet" text when there are none),
+     and the floating "+" at the bottom right to add one. -->
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
@@ -9,12 +9,17 @@
         <variable name="model" type="org.linhome.ui.devices.DevicesViewModel" />
     </data>
 
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        tools:context=".ui.devices.DevicesFragment"
+        backgoundcolor='@{"color_f"}'
+        >
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        tools:context=".ui.devices.DevicesFragment"
-        backgoundcolor='@{"color_f"}'
         >
 
         <org.linhome.ui.devices.AccountCardView
@@ -25,11 +30,17 @@
             android:layout_marginEnd="16dp"
             android:layout_marginTop="12dp" />
 
-        <!-- "Check ongoing call": a door of a site is ringing, but not on this phone (RingCheckActivity). -->
+        <!-- "Check ongoing call": a door of a site is ringing, but not on this phone (RingCheckActivity).
+             Grows to two lines for a long door name. -->
         <Button
             android:id="@+id/ring_check_button"
             android:layout_width="match_parent"
-            android:layout_height="52dp"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
             android:layout_marginTop="12dp"
@@ -46,16 +57,32 @@
             android:layout_marginEnd="16dp"
             android:layout_marginTop="4dp">
 
+        <!-- The bottom padding keeps the last door clear of the floating "+". -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/device_list"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipToPadding="false"
             android:paddingTop="8dp"
-            android:paddingBottom="8dp"
+            android:paddingBottom="88dp"
             />
         </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
 
     </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/new_device"
+            icon='@{"icons/more"}'
+            backgroundeffect='@{"primary_color"}'
+            tint='@{"color_c"}'
+            app:fabCustomSize="56dp"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            app:elevation="6dp"
+            android:layout_gravity="bottom|end"
+            android:layout_marginBottom="20dp"
+            android:layout_marginEnd="20dp" />
+
+    </FrameLayout>
 
 </layout>

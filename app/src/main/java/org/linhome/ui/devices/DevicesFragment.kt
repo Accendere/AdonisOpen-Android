@@ -92,9 +92,13 @@ class DevicesFragment : GenericFragment() {
             devicesViewModel.selectedDevice,
             this
         )
-        footer = AddDoorFooterAdapter {
-            mainactivity.navController.navigate(DevicesFragmentDirections.deviceNew())
+        val addDoor = { mainactivity.navController.navigate(DevicesFragmentDirections.deviceNew()) }
+        // The phone layout adds doors with the floating "+"; the tablet one has none, so its list keeps the buttons.
+        binding.newDevice?.let { fab ->
+            fab.contentDescription = Texts.get("devices_add")
+            fab.setOnClickListener { addDoor() }
         }
+        footer = AddDoorFooterAdapter(withButtons = binding.newDevice == null) { addDoor() }
         binding.deviceList.adapter = ConcatAdapter(devicesAdapter, footer)
 
         if (LinhomeApplication.instance.smartPhone()) {

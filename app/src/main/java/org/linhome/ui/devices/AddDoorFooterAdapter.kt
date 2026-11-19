@@ -32,23 +32,29 @@ import org.linhome.customisation.Theme
 import org.linhome.ui.widgets.LRoundRectButton
 
 /**
- * The end of the door list: a round "+" centred under the last door, or, with no doors yet, a larger
- * "Add a door" block. Replaces the floating "+".
+ * The end of the door list. With no doors yet, a short "no doors" text, and an "Add a door" button when
+ * [withButtons]. With doors, a round "+" centred under the last one when [withButtons], else nothing.
+ * [withButtons] is for a layout without the floating "+" (the tablet one); the phone layout has the floating "+".
  */
-class AddDoorFooterAdapter(private val onAdd: () -> Unit) : RecyclerView.Adapter<AddDoorFooterAdapter.Holder>() {
+class AddDoorFooterAdapter(private val withButtons: Boolean = true, private val onAdd: () -> Unit) : RecyclerView.Adapter<AddDoorFooterAdapter.Holder>() {
 
     /** No doors: the larger empty state. */
     var empty: Boolean = false
         set(value) {
             if (field != value) {
+                val before = itemCount
                 field = value
-                notifyItemChanged(0)
+                when {
+                    before == itemCount -> notifyItemChanged(0)
+                    before == 0 -> notifyItemInserted(0)
+                    else -> notifyItemRemoved(0)
+                }
             }
         }
 
     class Holder(val frame: FrameLayout) : RecyclerView.ViewHolder(frame)
 
-    override fun getItemCount() = 1
+    override fun getItemCount() = if (empty || withButtons) 1 else 0
 
     override fun getItemViewType(position: Int) = if (empty) 1 else 0
 
@@ -91,7 +97,7 @@ class AddDoorFooterAdapter(private val onAdd: () -> Unit) : RecyclerView.Adapter
                 setTextColor(Theme.getColor("color_g"))
                 gravity = Gravity.CENTER
             })
-            addView(LRoundRectButton(context).apply {
+            if (withButtons) addView(LRoundRectButton(context).apply {
                 Theme.roundRectButtonBackgroundStates("primary_color")?.also { background = it }
                 buttonText.text = Texts.get("devices_add")
                 isClickable = true
