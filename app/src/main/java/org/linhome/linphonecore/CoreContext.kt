@@ -549,9 +549,12 @@ class CoreContext(
                 }
             }
             if (state == Call.State.Error && call.callLog?.dir == Call.Dir.Outgoing) {
+                // Read now: the call's error info may be gone once the dialog shows.
+                val failure = OutgoingCallFailure.of(call.errorInfo?.protocolCode ?: 0, call.reason?.name)
+                Log.w("[Context] Outgoing call failed: code ${call.errorInfo?.protocolCode}, reason ${call.reason}, shown as $failure")
                 GlobalScope.launch(context = Dispatchers.Main) {
                     delay(250)
-                    DialogUtil.error("unable_to_call_device")
+                    DialogUtil.error(failure.textKey)
                 }
             }
         }
