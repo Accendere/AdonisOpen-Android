@@ -149,6 +149,13 @@ class MainActivity : GenericActivity() {
             // First run (or no account): the welcome screen with the setup choices.
             navController.navigate(R.id.navigation_assistant_root)
         }
+        if (savedInstanceState == null) {
+            // First launch after a Play install from the site's page: the claim link rides in the install referrer.
+            org.linhome.claim.InstallReferrerClaim.checkOnce(
+                this,
+                allowed = !LinhomeAccount.configured() && pendingAdonisConfig == null && !claimStarted
+            )
+        }
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.appbar.contentmain.tabbar) { view, insets ->
             val navBarInsets = insets.getInsets(WindowInsetsCompat.Type.navigationBars())

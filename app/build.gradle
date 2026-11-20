@@ -166,4 +166,7 @@ dependencies {
     implementation 'com.github.ybq:Android-SpinKit:1.4.0'
     implementation "androidx.media:media:1.7.1"
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.2.0-beta01'
+
+    // Play Install Referrer: a claim link passed through the Play Store install (see InstallReferrerClaim).
+    implementation 'com.android.installreferrer:installreferrer:2.2'
 }
