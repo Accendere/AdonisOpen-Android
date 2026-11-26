@@ -81,6 +81,7 @@ class DevicesFragment : GenericFragment() {
         }
         RegistrationMonitor.snapshot.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
         LinhomeAccount.appEnabledLiveData.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
+        org.linhome.store.DisabledDoors.changed.observe(viewLifecycleOwner) { binding.deviceList.adapter?.notifyDataSetChanged() }
         org.linhome.webhooks.Webhooks.sites.observe(viewLifecycleOwner) { binding.accountCard.refresh() }
 
         binding.deviceList.layoutManager =
@@ -184,12 +185,24 @@ class DevicesFragment : GenericFragment() {
         }
         for (site in org.linhome.webhooks.Webhooks.siteList()) {
             val ring = org.linhome.webhooks.Webhooks.ring(site.id, snapshot = false) ?: continue
-            if (ring.ringing) {
+            if (ring.ringing && !ringingDoorIsOff(site.id, ring.door)) {
                 showRingCheck(site.id, appDoorName(site.id) ?: ring.door)
                 return
             }
         }
         showRingCheck(null, null)
+    }
+
+    /**
+     * Whether the site's ringing door is one whose calls are off on this phone (DisabledDoors): the door named
+     * [door] here, or, when no door here has that name, every door of the site here.
+     */
+    private fun ringingDoorIsOff(siteId: String, door: String?): Boolean {
+        val doors = DeviceStore.devices.filter { org.linhome.webhooks.Webhooks.siteForDoor(it.address)?.id == siteId }
+        if (doors.isEmpty()) return false
+        val named = door?.let { name -> doors.firstOrNull { it.name.equals(name, ignoreCase = true) } }
+        return if (named != null) org.linhome.store.DisabledDoors.isDisabled(named)
+        else doors.all { org.linhome.store.DisabledDoors.isDisabled(it) }
     }
 
     /** The app's name for the site's door, when the site has exactly one here. */

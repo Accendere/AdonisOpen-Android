@@ -180,6 +180,8 @@ class DevicesAdapter(
             binding.setVariable(BR.device, device)
             binding.setVariable(BR.selectedDevice, selectedDevice)
             binding.executePendingBindings()
+            // A door whose calls are off on this phone (its info screen): greyed, still usable.
+            view.alpha = if (org.linhome.store.DisabledDoors.isDisabled(device)) 0.45f else 1f
             view.setOnClickListener {
                 if (selectedDevice.value == null || device != selectedDevice.value!!)
                     selectedDevice.value = device

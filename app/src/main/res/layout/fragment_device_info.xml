@@ -22,6 +22,49 @@
             android:paddingBottom="20dp"
             tools:context="org.linhome.ui.devices.info.DeviceInfoFragment">
 
+            <!-- Whether this phone takes this door's calls (DisabledDoors); set in DeviceInfoFragment. -->
+            <LinearLayout
+                android:id="@+id/calls_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="vertical"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/calls_label"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        style='@{"view_device_info_actions_title"}'
+                        text='@{"device_info_calls_toggle"}' />
+
+                    <Switch
+                        android:id="@+id/calls_switch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/calls_off_note"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    style='@{"view_device_info_address"}'
+                    android:visibility="gone"
+                    text='@{"device_info_calls_off_note"}' />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/name"
                 android:layout_width="wrap_content"
@@ -30,7 +73,7 @@
                 app:layout_constraintBottom_toTopOf="@id/address"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:layout_constraintStart_toStartOf="parent"
-                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/calls_row"
                 style='@{"view_device_info_name"}'
                 app:layout_constraintVertical_chainStyle="spread"
                 android:text='@{device.name}'

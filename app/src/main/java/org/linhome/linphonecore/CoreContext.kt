@@ -513,11 +513,12 @@ class CoreContext(
                     Log.i("[Context] Call is silently accepted for pre-answer action, staying in incoming view")
                 }
             } else if (state == Call.State.End || state == Call.State.Error || state == Call.State.Released) {
+                val quiet = state != Call.State.Released && onQuietlyDeclinedEnded(core, call)
                 if (state != Call.State.Released && isHeldForDecision(call)) {
                     call.callLog?.callId?.let { endedWhileHeld += it }
                     Log.i("[Context] A call held for its site's answer ended before it was decided")
                 }
-                if (state != Call.State.Released) {
+                if (state != Call.State.Released && !quiet) {
                     recordCallResult(call, state)
                     reportCallEnded(call, state)
                 }
@@ -565,6 +566,15 @@ class CoreContext(
      * held (no ringing, notification, screen or vibration) while that site is polled once, then decided again.
      */
     private fun onIncomingCall(core: Core, call: Call) {
+        val door = DeviceStore.findDeviceByAddress(call.remoteAddress)
+        if (org.linhome.store.DisabledDoors.isDisabled(door)) {
+            // Calls from this door are off on this phone (the door's info screen): busy at once, before anything
+            // rings or shows, and nothing for the site or History (see onQuietlyDeclinedEnded).
+            Log.i("[Context] Calls from door ${door?.name} are off on this phone: declining quietly")
+            call.callLog?.callId?.let { quietlyDeclined += it }
+            call.decline(Reason.Busy)
+            return
+        }
         val doorSite = DeviceStore.findDeviceByAddress(call.remoteAddress)?.let { org.linhome.webhooks.Webhooks.siteForDoor(it.address) }
         val callId = call.callLog?.callId
         // Before anything (the notification's full-screen intent) can turn the screen on.
@@ -599,6 +609,20 @@ class CoreContext(
                 }
             }
         }
+    }
+
+    /** Calls (by call id) turned down because their door is off on this phone (DisabledDoors). */
+    private val quietlyDeclined = mutableSetOf<String>()
+
+    /**
+     * A quietly declined call ended: its call log goes (no History entry, no unread count), with no result kept and
+     * no report to the site. False for any other call.
+     */
+    private fun onQuietlyDeclinedEnded(core: Core, call: Call): Boolean {
+        val log = call.callLog ?: return false
+        if (log.callId == null || !quietlyDeclined.remove(log.callId)) return false
+        coroutineScope.launch(Dispatchers.Main) { core.removeCallLog(log) }
+        return true
     }
 
     /** [decision] for [call] from [siteId]'s door; [held] when it was held while its site was asked. */

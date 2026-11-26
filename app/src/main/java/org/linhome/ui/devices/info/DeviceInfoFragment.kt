@@ -45,6 +45,25 @@ class DeviceInfoFragment : GenericFragment() {
         binding.lifecycleOwner = this
         binding.device = args.device
         mainactivity.toolbarViewModel.rightButtonVisible.value = args.device?.isRemotelyProvisionned != true
+        // Only with more than one door: with a single door the main calls switch says it all. A lone door already
+        // off keeps its switch, to be turned back on.
+        args.device?.takeIf {
+            org.linhome.store.DeviceStore.devices.size > 1 || org.linhome.store.DisabledDoors.isDisabled(it)
+        }?.let { device ->
+            // On the info screen itself, no Edit needed, and for site doors too (they can't be edited).
+            fun show(on: Boolean) {
+                binding.callsOffNote?.visibility = if (on) View.GONE else View.VISIBLE
+                binding.name?.alpha = if (on) 1f else 0.5f
+                binding.typeIcon?.alpha = if (on) 1f else 0.5f
+            }
+            val on = !org.linhome.store.DisabledDoors.isDisabled(device)
+            binding.callsSwitch?.isChecked = on
+            show(on)
+            binding.callsSwitch?.setOnCheckedChangeListener { _, checked ->
+                org.linhome.store.DisabledDoors.setDisabled(device, !checked)
+                show(checked)
+            }
+        } ?: run { binding.callsRow?.visibility = View.GONE }
         return binding.root
     }
 
