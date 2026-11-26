@@ -38,7 +38,6 @@ import org.linhome.compatibility.Compatibility
 import org.linhome.customisation.Texts
 import org.linhome.databinding.ActivityCallInProgressBinding
 import org.linhome.utils.DialogUtil
-import org.linhome.utils.extensions.forceVisible
 import org.linhome.utils.extensions.toogleVisible
 import org.linphone.core.Call
 import org.linphone.core.tools.Log
@@ -92,29 +91,12 @@ class CallInProgressActivity : CallGenericActivity() {
                     else -> {}
                 }
             })
-            binding.chunkCallDeviceIconOrVideo?.videotogglecollapsed?.setOnClickListener {
-                coreContext.core.nativeVideoWindowId = binding.videofullscreen
-                callViewModel.toggleVideoFullScreen()
-            }
-            binding.videotogglefullscreen.setOnClickListener {
-                coreContext.core.nativeVideoWindowId = binding.chunkCallDeviceIconOrVideo?.videocollapsed
-                callViewModel.toggleVideoFullScreen()
-            }
-            callViewModel.videoFullScreen.observe(this, Observer { full ->
-                binding.pad.forceVisible()
-                binding.timer.forceVisible()
-                coreContext.core.nativeVideoWindowId =
-                    if (callViewModel.videoFullScreen.value!!) binding.videofullscreen else binding.chunkCallDeviceIconOrVideo?.videocollapsed
-            })
             callViewModel.videoSize.observe(this, Observer { size ->
                 binding.chunkCallVideoOrIcon.updateLayoutParams<ConstraintLayout.LayoutParams> {
                     dimensionRatio = "H,${size.width}:${size.height}"
                     val deviceHasButtons = callViewModel.actions.isNotEmpty()
-                    matchConstraintPercentWidth = computePercentageWidth(size,if (deviceHasButtons) 380 else 200) //  200 left for buttons and header if no actions, 300 otherwise
+                    matchConstraintPercentWidth = computePercentageWidth(size,if (deviceHasButtons) 430 else 250) // Space for buttons, header and the calls switch
                 }
-            })
-            callViewModel.videoContent.observe(this, {
-                callViewModel.videoFullScreen.value = it
             })
             startWithPermissionCheck()
         } ?: finish()
@@ -122,8 +104,7 @@ class CallInProgressActivity : CallGenericActivity() {
 
     override fun onResume() {
         super.onResume()
-        coreContext.core.nativeVideoWindowId =
-            if (callViewModel.videoFullScreen.value!!) binding.videofullscreen else binding.chunkCallDeviceIconOrVideo?.videocollapsed
+        coreContext.core.nativeVideoWindowId = binding.chunkCallDeviceIconOrVideo?.videocollapsed
 
         if (coreContext.core.callsNb == 0) {
             Log.w("[Call Activity] Resuming but no call found...")

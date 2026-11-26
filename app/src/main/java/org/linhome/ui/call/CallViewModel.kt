@@ -76,7 +76,6 @@ class CallViewModel(val call: Call) : ViewModel() {
 
     val callState: MutableLiveData<Call.State> = MutableLiveData(call.state)
     val videoContent: MutableLiveData<Boolean> = MutableLiveData()
-    val videoFullScreen: MutableLiveData<Boolean> = MutableLiveData(false)
 
     val speakerDisabled: MutableLiveData<Boolean> =
         MutableLiveData(coreContext.core.outputAudioDevice?.type != AudioDevice.Type.Speaker)
@@ -336,10 +335,6 @@ class CallViewModel(val call: Call) : ViewModel() {
         }
     }
 
-
-    fun toggleVideoFullScreen() {
-        videoFullScreen.value = !videoFullScreen.value!!
-    }
 
     fun performAction(action: Action) {
         Compatibility.vibrateActionFeedback()

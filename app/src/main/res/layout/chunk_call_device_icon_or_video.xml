@@ -18,8 +18,7 @@
         android:id="@+id/chunk_call_video_or_icon"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:visibility='@{callmodel.videoFullScreen ? View.INVISIBLE : View.VISIBLE, default = "visible"}'>
+        android:gravity="center">
 
         <ImageView
             android:id="@+id/icon"
@@ -55,19 +54,6 @@
             app:layout_constraintBottom_toBottomOf="parent"
             android:visibility='@{!callmodel.videoContent ? View.GONE : View.VISIBLE, default = "gone"}'>
 
-            <com.google.android.material.floatingactionbutton.FloatingActionButton
-                android:id="@+id/videotogglecollapsed"
-                backgroundeffect='@{"primary_color"}'
-                icon='@{"icons/fullscreen_start"}'
-                tint='@{"color_c"}'
-                android:layout_width="50dp"
-                android:layout_height="50dp"
-                android:layout_alignParentTop="true"
-                android:layout_alignParentEnd="true"
-                android:layout_gravity="end"
-                android:layout_marginTop="13dp"
-                android:layout_marginEnd="13dp"
-                app:fabCustomSize="50dp" />
 
             <org.linhome.ui.widgets.RoundCornersTextureView
                 android:id="@+id/videocollapsed"

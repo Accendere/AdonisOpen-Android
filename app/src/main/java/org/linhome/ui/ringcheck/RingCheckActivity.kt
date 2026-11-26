@@ -191,7 +191,8 @@ class RingCheckActivity : GenericActivity() {
         fun dp(v: Int) = (v * density).toInt()
         val accent = Theme.getColor("color_a")
         val onAccent = Theme.getColor("color_c")
-        val textColor = Theme.getColor("color_b")
+        // The call screens' colors: light text on their dark gradient.
+        val textColor = Theme.getColor("color_c")
 
         fun pill(fill: Int, stroke: Int? = null) = GradientDrawable().apply {
             cornerRadius = 24f * density
@@ -201,9 +202,14 @@ class RingCheckActivity : GenericActivity() {
 
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(24), dp(16), dp(24))
+            setPadding(dp(16), dp(10), dp(16), dp(24))
             gravity = Gravity.CENTER_HORIZONTAL
         }
+        // The call screens' header (the Adonis Open logo between two lines); the buttons below stay plain, as this
+        // view can only open the door, not take the call.
+        val header = org.linhome.databinding.ChunkCallTopBinding.inflate(layoutInflater, column, false)
+        header.executePendingBindings()
+        column.addView(header.root, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         title = TextView(this).apply {
             text = doorName?.let { Texts.get("ring_check_title", it) } ?: Texts.get("ring_check_title_unknown")
             if (doorName != null) tag = "app" // the app's own name wins over the site's intercom name
@@ -212,12 +218,12 @@ class RingCheckActivity : GenericActivity() {
             setTypeface(typeface, Typeface.BOLD)
             gravity = Gravity.CENTER
         }
-        column.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+        column.addView(title, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(20) })
 
         picture = ImageView(this).apply {
             adjustViewBounds = true
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setBackgroundColor(Theme.getColor("color_d"))
+            setBackgroundColor(0x1AFFFFFF) // a faint frame on the dark background until the picture comes
             minimumHeight = dp(200)
             contentDescription = Texts.get("ring_check_picture_desc")
         }
@@ -262,8 +268,9 @@ class RingCheckActivity : GenericActivity() {
         column.addView(close, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12) })
 
         return ScrollView(this).apply {
-            setBackgroundColor(Theme.getColor("color_f"))
+            background = Theme.getGradientColor("dark_light_vertical_gradient")
             isFillViewport = true
+            fitsSystemWindows = true // the header below the status bar, as on the call screens
             addView(column)
         }
     }

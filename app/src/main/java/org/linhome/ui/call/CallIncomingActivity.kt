@@ -177,19 +177,11 @@ class CallIncomingActivity : CallGenericActivity() {
                     }
                 }
             })
-            binding.chunkCallDeviceIconOrVideo.videotogglecollapsed.setOnClickListener {
-                coreContext.core.nativeVideoWindowId = binding.videofullscreen
-                callViewModel.toggleVideoFullScreen()
-            }
-            binding.videotogglefullscreen.setOnClickListener {
-                coreContext.core.nativeVideoWindowId = binding.chunkCallDeviceIconOrVideo.videocollapsed
-                callViewModel.toggleVideoFullScreen()
-            }
             callViewModel.videoSize.observe(this, Observer { size ->
                 binding.chunkCallVideoOrIcon.updateLayoutParams<ConstraintLayout.LayoutParams> {
                     dimensionRatio = "H,${size.width}:${size.height}"
                     val deviceHasButtons = callViewModel.actions.isNotEmpty()
-                    matchConstraintPercentWidth = computePercentageWidth(size, if (deviceHasButtons) 400 else 250) // Space for buttons and header
+                    matchConstraintPercentWidth = computePercentageWidth(size, if (deviceHasButtons) 450 else 300) // Space for buttons, header and the calls switch
                 }
             })
         }
@@ -244,8 +236,7 @@ class CallIncomingActivity : CallGenericActivity() {
     override fun onResume() {
         super.onResume()
         if (::callViewModel.isInitialized) {
-            coreContext.core.nativeVideoWindowId =
-                if (callViewModel.videoFullScreen.value!!) binding.videofullscreen else binding.chunkCallDeviceIconOrVideo.videocollapsed
+            coreContext.core.nativeVideoWindowId = binding.chunkCallDeviceIconOrVideo.videocollapsed
         }
     }
 

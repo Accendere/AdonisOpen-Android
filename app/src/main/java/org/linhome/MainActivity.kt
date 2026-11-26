@@ -315,45 +315,12 @@ class MainActivity : GenericActivity() {
         binding.appbar.toolbarCallsToggle.visibility = if (isDevicesScreen) View.VISIBLE else View.GONE
         if (!isDevicesScreen) return
 
-        val enabled = LinhomeApplication.corePreferences.appEnabled
-        val density = resources.displayMetrics.density
-        val accent = Theme.getColor("color_a")
-        // White on the accent, unless the accent is too light for it (e.g. the amber theme): then the dark text color.
-        val onAccent = Theme.getColor("color_c").let { light ->
-            if (androidx.core.graphics.ColorUtils.calculateContrast(light, accent or 0xFF000000.toInt()) >= 3.0) light
-            else Theme.getColor("color_b")
-        }
-
-        // A 36dp pill inside the 48dp tap target, in the theme's accent color:
-        // filled while taking calls, outlined (accent border and text) while paused.
-        val pill = android.graphics.drawable.GradientDrawable().apply {
-            shape = android.graphics.drawable.GradientDrawable.RECTANGLE
-            cornerRadius = 18f * density
-            if (enabled) {
-                setColor(accent)
-            } else {
-                setColor(android.graphics.Color.TRANSPARENT)
-                setStroke((2f * density).toInt(), accent)
-            }
-        }
-        val inset = (6f * density).toInt()
-        val ripple = android.graphics.drawable.RippleDrawable(
-            android.content.res.ColorStateList.valueOf(androidx.core.graphics.ColorUtils.setAlphaComponent(if (enabled) onAccent else accent, 0x40)),
-            android.graphics.drawable.InsetDrawable(pill, 0, inset, 0, inset),
-            null
+        org.linhome.ui.widgets.CallsSwitchPill.style(
+            binding.appbar.toolbarCallsToggle,
+            binding.appbar.toolbarCallsToggleIcon,
+            binding.appbar.toolbarCallsToggleLabel,
+            LinhomeApplication.corePreferences.appEnabled
         )
-        binding.appbar.toolbarCallsToggle.background = ripple
-
-        val foreground = if (enabled) onAccent else accent
-        binding.appbar.toolbarCallsToggleIcon.setImageResource(
-            if (enabled) R.drawable.ic_qs_receive_calls else R.drawable.ic_qs_receive_calls_off
-        )
-        binding.appbar.toolbarCallsToggleIcon.imageTintList = android.content.res.ColorStateList.valueOf(foreground)
-        binding.appbar.toolbarCallsToggleLabel.setTextColor(foreground)
-        binding.appbar.toolbarCallsToggleLabel.text =
-            Texts.get(if (enabled) "toolbar_calls_active" else "toolbar_calls_paused")
-        binding.appbar.toolbarCallsToggle.contentDescription =
-            Texts.get(if (enabled) "toolbar_calls_toggle_desc_active" else "toolbar_calls_toggle_desc_paused")
     }
 
     /**
